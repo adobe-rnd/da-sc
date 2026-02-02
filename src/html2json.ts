@@ -1,6 +1,5 @@
 import { select, selectAll } from 'hast-util-select';
 import { Element, Root } from 'hast';
-import { toHtml } from 'hast-util-to-html';
 import { toString } from 'hast-util-to-string';
 
 const SELF_REF = 'self://#';
@@ -13,7 +12,6 @@ export default class HTMLConverter {
 
   constructor(htmlDocument: Root) {
     this.htmlDocument = htmlDocument;
-    console.log(toHtml(this.htmlDocument));
     this.blocks = selectAll('main > div > div', this.htmlDocument);
   }
 
@@ -25,14 +23,15 @@ export default class HTMLConverter {
 
   getJson() {
     const metadata = this.getMetadata();
-    console.log(metadata);
     let json = {};
     if (metadata.storageFormat === 'code') {
+      console.log('Detected type: code');
       const code = select('pre > code', this.htmlDocument);
       if (code) {
         json = JSON.parse(toString(code));
       }
     } else {
+      console.log('Detected type: blocks');
       json = this.convertBlocksToJson();
     }
 

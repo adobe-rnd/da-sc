@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "hast-util-select": "^6.0.0",
-    "hast-util-to-html": "^9.0.5",
     "hast-util-to-string": "^3.0.1",
     "rehype-parse": "^9.0.0",
     "unified": "^11.0.4"

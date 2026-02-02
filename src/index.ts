@@ -29,7 +29,8 @@ export default {
         'Access-Control-Allow-Headers': 'Content-Type',
       };
 
-      if (new URL(request.url).pathname === '/favicon.ico') {
+      const pathname = new URL(request.url).pathname;
+      if (pathname === '/' || pathname === '/favicon.ico') {
         return new Response('', { status: 404 });
       }
 
@@ -48,7 +49,6 @@ export default {
       }
 
       const ctx = getCtx(request.url);
-      console.log('🔧 Context parsed:', JSON.stringify(ctx, null, 2));
       const edsContentUrl = `${ctx.edsDomainUrl}/${ctx.contentPath}`;
       const edsResp = await fetch(edsContentUrl, { cf: { scrapeShield: false } });
       if (!edsResp.ok) {

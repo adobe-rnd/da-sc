@@ -3,6 +3,14 @@ import { describe, it, expect } from 'vitest';
 import worker from '../src';
 
 describe('da-sc worker', () => {
+	it('returns 404 for root path', async () => {
+		const request = new Request<unknown, IncomingRequestCfProperties>('http://example.com/');
+		const ctx = createExecutionContext();
+		const response = await worker.fetch(request, env, ctx);
+		await waitOnExecutionContext(ctx);
+		expect(response.status).toBe(404);
+	});
+
 	it('returns 404 for favicon.ico', async () => {
 		const request = new Request<unknown, IncomingRequestCfProperties>('http://example.com/favicon.ico');
 		const ctx = createExecutionContext();
