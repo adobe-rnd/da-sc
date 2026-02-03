@@ -48,7 +48,6 @@ export default {
       }
 
       const ctx = getCtx(request.url);
-      console.log('🔧 Context parsed:', JSON.stringify(ctx, null, 2));
       const edsContentUrl = `${ctx.edsDomainUrl}/${ctx.contentPath}`;
       const edsResp = await fetch(edsContentUrl, { cf: { scrapeShield: false } });
       if (!edsResp.ok) {
