@@ -2,18 +2,22 @@ name = "da-sc"
 main = "src/index.ts"
 compatibility_date = "2025-07-10"
 compatibility_flags = ["global_fetch_strictly_public"]
+workers_dev = true
 
 [vars]
 VERSION = "@@VERSION@@-dev"
+ENVIRONMENT = "dev"
 
 # CI environment
 [env.ci]
 name = "da-sc-ci"
 [env.ci.vars]
 VERSION = "@@VERSION@@-ci"
+ENVIRONMENT = "ci"
 
 # Production environment
 [env.production]
 name = "da-sc"
 [env.production.vars]
 VERSION = "@@VERSION@@"
+ENVIRONMENT = "production"
