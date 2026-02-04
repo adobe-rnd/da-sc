@@ -67,7 +67,7 @@ export default class HTMLConverter {
         if (!valColChild) {
           rdx[key] = '';
         } else if (listElement) {
-          // List element - convert to array          
+          // List element - convert to array
           rdx[key] = this.getArrayValues(key, selectAll('li', listElement));
         } else {
           // Simple value - get typed value from text content
