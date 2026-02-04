@@ -4,11 +4,21 @@
   "description": "Transform Edge Delivery Services HTML into a structured JSON representation.",
   "main": "src/index.js",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adobe-rnd/da-sc.git"
+  },
   "scripts": {
     "dev": "wrangler dev",
     "build": "wrangler build",
     "deploy": "wrangler deploy",
-    "test": "vitest run"
+    "deploy:ci": "node prepare-deploy.js && wrangler deploy -e ci -c wrangler-versioned.toml",
+    "deploy:production": "node prepare-deploy.js && wrangler deploy -e production -c wrangler-versioned.toml",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "prepare": "husky",
+    "semantic-release": "semantic-release",
+    "semantic-release-dry": "semantic-release --dry-run --no-ci --branches $CI_BRANCH"
   },
   "dependencies": {
     "hast-util-select": "^6.0.0",
@@ -18,10 +28,23 @@
     "unified": "^11.0.4"
   },
   "devDependencies": {
+    "@adobe/eslint-config-helix": "^2.0.8",
     "@cloudflare/vitest-pool-workers": "^0.8.53",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/exec": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
     "@types/hast": "^3.0.4",
+    "@typescript-eslint/eslint-plugin": "^8.32.1",
+    "@typescript-eslint/parser": "^8.32.1",
+    "eslint": "^8.57.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.1",
+    "semantic-release": "^24.2.7",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
     "wrangler": "^4.24.4"
+  },
+  "lint-staged": {
+    "*.{js,ts}": "eslint --fix"
   }
 }
