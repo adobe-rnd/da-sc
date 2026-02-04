@@ -11,7 +11,6 @@
  */
 import { select, selectAll } from 'hast-util-select';
 import { Element, Root } from 'hast';
-import { toHtml } from 'hast-util-to-html';
 import { toString } from 'hast-util-to-string';
 
 const SELF_REF = 'self://#';
@@ -25,7 +24,6 @@ export default class HTMLConverter {
 
   constructor(htmlDocument: Root) {
     this.htmlDocument = htmlDocument;
-    console.log(toHtml(this.htmlDocument));
     this.blocks = selectAll('main > div > div', this.htmlDocument);
   }
 
@@ -37,7 +35,6 @@ export default class HTMLConverter {
 
   getJson() {
     const metadata = this.getMetadata();
-    console.log(metadata);
     let json = {};
     if (metadata.storageFormat === 'code') {
       const code = select('pre > code', this.htmlDocument);
@@ -60,26 +57,21 @@ export default class HTMLConverter {
   getProperties(block: Element): BlockProperties {
     return (block.children as Element[]).reduce((rdx: BlockProperties, row: Element) => {
       if (row.children) {
-        const elementChildren = (row.children as Element[]).filter((child) => child.type === 'element');
+        // Get only element-tag children (exclude text/comments/etc)
+        const elementChildren = selectAll(':scope > *', row);
+        // Get the first two children as key and value columns
         const [keyCol, valCol] = elementChildren;
         const key = toString(keyCol).trim();
-        // If there's absolutely no children in cell, return an empty string
         const valColChild = valCol.children[0] as Element | undefined;
+        const listElement = select('ul, ol', valCol);
         if (!valColChild) {
           rdx[key] = '';
-        } else if (valColChild.children && (valColChild.children as Element[]).length === 1) {
-          // Li
-          const firstChild = valColChild.children[0] as Element;
-          if ((firstChild.children as Element[])?.length) {
-            rdx[key] = [this.getTypedValue((firstChild.children[0] as { value: string }).value)];
-          } else {
-            const isArr = firstChild.children;
-            const value = this.getTypedValue((firstChild as unknown as { value: string }).value);
-            rdx[key] = isArr ? [value] : value;
-          }
+        } else if (listElement) {
+          // List element - convert to array
+          rdx[key] = this.getArrayValues(key, selectAll('li', listElement));
         } else {
-          // rdx[key] = this.getArrayValues(key, valColChild.children as Element[]);
-          rdx[key] = toString(valColChild).trim();
+          // Simple value - get typed value from text content
+          rdx[key] = this.getTypedValue(toString(valCol).trim());
         }
       }
       return rdx;
@@ -127,18 +119,14 @@ export default class HTMLConverter {
   }
 
   getArrayValues(key: string, parent: Element[]): unknown[] {
-    return parent.reduce((acc: unknown[], listItem: Element) => {
-      // Only push non empty LIs
-      if (listItem.children.length > 0) {
-        const { value } = listItem.children[0] as { value: string };
-        if (!value) {
-          return acc;
-        }
-        const reference = this.getReference(value);
-        acc.push(reference ?? value);
+    return parent.map((listItem: Element) => {
+      const { value } = listItem.children[0] as { value: string };
+      if (!value) {
+        return '';
       }
-      return acc;
-    }, []);
+      const reference = this.getReference(value);
+      return reference ?? value;
+    });
   }
 
   getReference(text: string): BlockProperties | null {
