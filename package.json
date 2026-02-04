@@ -4,11 +4,19 @@
   "description": "Transform Edge Delivery Services HTML into a structured JSON representation.",
   "main": "src/index.js",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adobe-rnd/da-sc.git"
+  },
   "scripts": {
     "dev": "wrangler dev",
     "build": "wrangler build",
     "deploy": "wrangler deploy",
-    "test": "vitest run"
+    "deploy:ci": "node prepare-deploy.js && wrangler deploy -e ci -c wrangler-versioned.toml",
+    "deploy:production": "node prepare-deploy.js && wrangler deploy -e production -c wrangler-versioned.toml",
+    "test": "vitest run",
+    "semantic-release": "semantic-release",
+    "semantic-release-dry": "semantic-release --dry-run --no-ci --branches $CI_BRANCH"
   },
   "dependencies": {
     "hast-util-select": "^6.0.0",
@@ -19,7 +27,11 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.8.53",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/exec": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
     "@types/hast": "^3.0.4",
+    "semantic-release": "^24.2.7",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
     "wrangler": "^4.24.4"
