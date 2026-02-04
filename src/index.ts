@@ -66,9 +66,12 @@ export default {
         },
       });
     } catch (err: any) {
-      return new Response(`Error: ${err.message || err}`, { status: 500, headers: {
-        'Access-Control-Allow-Origin': '*',
-      }});
+      return new Response(`Error: ${err.message || err}`, {
+        status: 500,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
     }
   },
 };
