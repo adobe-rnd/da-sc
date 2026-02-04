@@ -26,9 +26,9 @@ function getTld(tier: string): string {
 export function getCtx(url: string): Ctx {
   const urlObj = new URL(url);
   const [tier, org, site, ...rest] = urlObj.pathname
-        .replace('.json', '')
-        .slice(1)
-        .split('/');
+    .replace('.json', '')
+    .slice(1)
+    .split('/');
   const tld = getTld(tier);
 
   if (!org && !site) {
@@ -39,6 +39,6 @@ export function getCtx(url: string): Ctx {
     org,
     site,
     edsDomainUrl: `https://main--${site}--${org}.aem.${tld}`,
-    contentPath: rest.join('/') || ''
+    contentPath: rest.join('/') || '',
   };
 }
