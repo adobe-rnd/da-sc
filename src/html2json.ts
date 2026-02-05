@@ -120,11 +120,16 @@ export default class HTMLConverter {
 
   getArrayValues(key: string, parent: Element[]): unknown[] {
     if (!parent.length) return [];
+    // Return empty if first item is completely empty
+    // For type safety, HTML will persist a ul with an empty li.
+    if (parent.length === 1) {
+      const firstChild = parent[0].children[0] as { value: string } | undefined;
+      if (!firstChild?.value) return [];
+    }
     return parent.map((listItem: Element) => {
       const firstChild = listItem.children[0] as { value: string } | undefined;
-      if (!firstChild?.value) return '';
-      const reference = this.getReference(firstChild.value);
-      return reference ?? firstChild.value;
+      const reference = this.getReference(firstChild!.value);
+      return reference ?? firstChild!.value;
     });
   }
 
