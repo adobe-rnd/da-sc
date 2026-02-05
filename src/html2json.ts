@@ -121,6 +121,7 @@ export default class HTMLConverter {
   getArrayValues(key: string, parent: Element[]): unknown[] {
     if (!parent.length) return [];
     return parent.map((listItem: Element) => {
+      if (!listItem.children?.[0]) return '';
       const { value } = listItem.children[0] as { value: string };
       if (!value) {
         return '';
