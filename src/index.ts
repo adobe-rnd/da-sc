@@ -20,13 +20,18 @@ function parseHtml(html: string) {
     .parse(html);
 }
 
+function getAuthorizationToken(request: Request): string | undefined {
+  const auth = request.headers.get('Authorization');
+  return auth && /^token\s+/i.test(auth.trimStart()) ? auth.trim() : undefined;
+}
+
 export default {
   async fetch(request: Request): Promise<Response> {
     try {
       const corsHeaders = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       };
 
       if (new URL(request.url).pathname === '/favicon.ico') {
@@ -49,20 +54,32 @@ export default {
 
       const ctx = getCtx(request.url);
       const edsContentUrl = `${ctx.edsDomainUrl}/${ctx.contentPath}`;
-      const edsResp = await fetch(edsContentUrl, { cf: { scrapeShield: false } });
+      const tokenAuth = getAuthorizationToken(request);
+      const edsResp = await fetch(edsContentUrl, {
+        cf: { scrapeShield: false },
+        ...(tokenAuth ? { headers: { Authorization: tokenAuth } } : {}),
+      });
       if (!edsResp.ok) {
-        return new Response(`Failed to fetch EDS page: ${edsContentUrl}`, { status: edsResp.status, headers: corsHeaders });
+        return new Response(`Failed to fetch EDS page: ${edsContentUrl}`, {
+          status: edsResp.status,
+          headers: corsHeaders,
+        });
       }
 
       const html = await edsResp.text();
       const converter = new HTMLConverter(parseHtml(html));
       const json = converter.getJson();
 
+      const jsonHeaders: Record<string, string> = {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
+      };
+      if (tokenAuth) {
+        jsonHeaders['Cache-Control'] = 'private, no-store';
+      }
+
       return new Response(JSON.stringify(json, null, 2), {
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json',
-        },
+        headers: jsonHeaders,
       });
     } catch (err: any) {
       return new Response(`Error: ${err.message || err}`, {
