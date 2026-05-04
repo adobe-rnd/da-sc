@@ -96,6 +96,35 @@ describe('da-sc worker', () => {
     expect(response.headers.get('Cache-Control')).toBeNull();
   });
 
+  it('returns JSON error when EDS responds with 401', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 401 }));
+    const request = new Request<unknown, IncomingRequestCfProperties>('http://example.com/preview/org/site/page', {
+      headers: { Authorization: 'token x' },
+    });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+    expect(response.status).toBe(401);
+    expect(response.headers.get('Content-Type')).toContain('application/json');
+    const body = await response.json() as { error: string };
+    expect(body.error).toBe(
+      'Unable to authenticate this request. Ensure a valid access token is supplied using the Authorization header.',
+    );
+  });
+
+  it('returns JSON error when EDS responds with 403', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 403 }));
+    const request = new Request<unknown, IncomingRequestCfProperties>('http://example.com/preview/org/site/page');
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+    expect(response.status).toBe(403);
+    const body = await response.json() as { error: string };
+    expect(body.error).toBe(
+      'Access to this resource was denied. Ensure the supplied credentials are permitted to access the requested content.',
+    );
+  });
+
   it('forwards Authorization token scheme to EDS fetch', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(MOCK_EDS_HTML, { status: 200 }));
     const request = new Request<unknown, IncomingRequestCfProperties>('http://example.com/preview/org/site/page', {

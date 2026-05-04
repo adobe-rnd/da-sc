@@ -20,6 +20,10 @@ function parseHtml(html: string) {
     .parse(html);
 }
 
+/**
+ * Returns `Authorization` only for the `token` scheme (`Authorization: token <secret>`).
+ * Other schemes (e.g. `Bearer`, `Basic`) are not supported and yield `undefined`.
+ */
 function getAuthorizationToken(request: Request): string | undefined {
   const auth = request.headers.get('Authorization');
   return auth && /^token\s+/i.test(auth.trimStart()) ? auth.trim() : undefined;
@@ -60,9 +64,25 @@ export default {
         ...(tokenAuth ? { headers: { Authorization: tokenAuth } } : {}),
       });
       if (!edsResp.ok) {
-        return new Response(`Failed to fetch EDS page: ${edsContentUrl}`, {
-          status: edsResp.status,
-          headers: corsHeaders,
+        const { status } = edsResp;
+        let message: string;
+        if (status === 401) {
+          message = 'Unable to authenticate this request. Ensure a valid access token is supplied using the Authorization header.';
+        } else if (status === 403) {
+          message = 'Access to this resource was denied. Ensure the supplied credentials are permitted to access the requested content.';
+        } else {
+          message = `The requested content could not be retrieved: ${edsContentUrl}`;
+        }
+        const errHeaders: Record<string, string> = {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+        };
+        if (tokenAuth) {
+          errHeaders['Cache-Control'] = 'private, no-store';
+        }
+        return new Response(JSON.stringify({ error: message }), {
+          status,
+          headers: errHeaders,
         });
       }
 
