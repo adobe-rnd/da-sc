@@ -50,9 +50,12 @@ export default {
       }
 
       if (request.method !== 'GET') {
-        return new Response('Method Not Allowed', {
+        return new Response(JSON.stringify({ error: 'Method Not Allowed' }), {
           status: 405,
-          headers: corsHeaders,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json; charset=utf-8',
+          },
         });
       }
 
@@ -65,22 +68,19 @@ export default {
       });
       if (!edsResp.ok) {
         const { status } = edsResp;
-        let message: string;
-        if (status === 401) {
-          message = 'Unable to authenticate this request. Ensure a valid access token is supplied using the Authorization header.';
-        } else if (status === 403) {
-          message = 'Access to this resource was denied. Ensure the supplied credentials are permitted to access the requested content.';
-        } else {
-          message = `The requested content could not be retrieved: ${edsContentUrl}`;
-        }
+        const xError = edsResp.headers.get('x-error') ?? edsResp.headers.get('X-Error');
+        const upstreamText = await edsResp.text();
+        const returnedError = status === 404 ? '404 Not Found' : upstreamText;
         const errHeaders: Record<string, string> = {
           ...corsHeaders,
-          'Content-Type': 'application/json',
+          'Access-Control-Expose-Headers': 'X-Error, Cache-Control',
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'private, no-store',
         };
-        if (tokenAuth) {
-          errHeaders['Cache-Control'] = 'private, no-store';
+        if (xError) {
+          errHeaders['X-Error'] = xError;
         }
-        return new Response(JSON.stringify({ error: message }), {
+        return new Response(JSON.stringify({ error: returnedError }), {
           status,
           headers: errHeaders,
         });
@@ -92,7 +92,7 @@ export default {
 
       const jsonHeaders: Record<string, string> = {
         ...corsHeaders,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json; charset=utf-8',
       };
       if (tokenAuth) {
         jsonHeaders['Cache-Control'] = 'private, no-store';
@@ -102,10 +102,12 @@ export default {
         headers: jsonHeaders,
       });
     } catch (err: any) {
-      return new Response(`Error: ${err.message || err}`, {
+      const message = err instanceof Error ? err.message : String(err);
+      return new Response(JSON.stringify({ error: message }), {
         status: 500,
         headers: {
           'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/json; charset=utf-8',
         },
       });
     }

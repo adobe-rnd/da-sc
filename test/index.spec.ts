@@ -50,6 +50,9 @@ describe('da-sc worker', () => {
     const response = await worker.fetch(request, env, ctx);
     await waitOnExecutionContext(ctx);
     expect(response.status).toBe(405);
+    expect(response.headers.get('Content-Type')).toContain('application/json');
+    const body = await response.json() as { error: string };
+    expect(body.error).toBe('Method Not Allowed');
   });
 
   it('includes CORS headers in error response', async () => {
@@ -96,7 +99,7 @@ describe('da-sc worker', () => {
     expect(response.headers.get('Cache-Control')).toBeNull();
   });
 
-  it('returns JSON error when EDS responds with 401', async () => {
+  it('returns JSON error with EDS body (including empty)', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 401 }));
     const request = new Request<unknown, IncomingRequestCfProperties>('http://example.com/preview/org/site/page', {
       headers: { Authorization: 'token x' },
@@ -106,23 +109,74 @@ describe('da-sc worker', () => {
     await waitOnExecutionContext(ctx);
     expect(response.status).toBe(401);
     expect(response.headers.get('Content-Type')).toContain('application/json');
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
     const body = await response.json() as { error: string };
-    expect(body.error).toBe(
-      'Unable to authenticate this request. Ensure a valid access token is supplied using the Authorization header.',
-    );
+    expect(body.error).toBe('');
   });
 
-  it('returns JSON error when EDS responds with 403', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 403 }));
+  it('wraps EDS error body in JSON and forwards x-error header', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('upstream-detail', {
+        status: 403,
+        headers: {
+          'Content-Type': 'text/plain',
+          'x-error': 'EDS_CODE',
+        },
+      }),
+    );
     const request = new Request<unknown, IncomingRequestCfProperties>('http://example.com/preview/org/site/page');
     const ctx = createExecutionContext();
     const response = await worker.fetch(request, env, ctx);
     await waitOnExecutionContext(ctx);
     expect(response.status).toBe(403);
+    expect(response.headers.get('Content-Type')).toContain('application/json');
     const body = await response.json() as { error: string };
-    expect(body.error).toBe(
-      'Access to this resource was denied. Ensure the supplied credentials are permitted to access the requested content.',
+    expect(body.error).toBe('upstream-detail');
+    expect(response.headers.get('X-Error')).toBe('EDS_CODE');
+    expect(response.headers.get('Access-Control-Expose-Headers')).toContain('X-Error');
+    expect(response.headers.get('Access-Control-Expose-Headers')).toContain('Cache-Control');
+  });
+
+  it('sets Cache-Control to private, no-store on EDS error responses', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('upstream-error', {
+        status: 502,
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+      }),
     );
+    const request = new Request<unknown, IncomingRequestCfProperties>('http://example.com/preview/org/site/page');
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+    expect(response.status).toBe(502);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    const body = await response.json() as { error: string };
+    expect(body.error).toBe('upstream-error');
+  });
+
+  it('uses 404 Not Found in JSON error and still forwards x-error and Cache-Control', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('<html>not found</html>', {
+        status: 404,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'x-error': 'NOT_FOUND',
+          'Cache-Control': 'max-age=60',
+        },
+      }),
+    );
+    const request = new Request<unknown, IncomingRequestCfProperties>('http://example.com/preview/org/site/missing');
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+    expect(response.status).toBe(404);
+    expect(response.headers.get('Content-Type')).toContain('application/json');
+    const body = await response.json() as { error: string };
+    expect(body.error).toBe('404 Not Found');
+    expect(response.headers.get('X-Error')).toBe('NOT_FOUND');
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
   });
 
   it('forwards Authorization token scheme to EDS fetch', async () => {
