@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/adobe-rnd/da-sc/compare/v1.0.1...v1.1.0) (2026-05-05)
+
+
+### Features
+
+* Support Authentication via token. ([#15](https://github.com/adobe-rnd/da-sc/issues/15)) ([23a0d66](https://github.com/adobe-rnd/da-sc/commit/23a0d668889e4b88daab97de8db280bd73bdddba))
+
 ## [1.0.1](https://github.com/adobe-rnd/da-sc/compare/v1.0.0...v1.0.1) (2026-04-28)
 
 
