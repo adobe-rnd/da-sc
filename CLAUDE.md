@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-da-sc is a Cloudflare Worker that transforms Edge Delivery Services (EDS) HTML content into structured JSON. It fetches HTML from EDS domains and converts it using HAST (Hypertext Abstract Syntax Tree) utilities.
+da-sc is a Cloudflare Worker that transforms Edge Delivery Services (EDS) HTML content into structured JSON. It fetches HTML from EDS domains and converts it using `da-sc-sdk`.
 
 ## Commands
 
@@ -21,7 +21,6 @@ npm test         # Run tests (vitest run)
 
 - **`src/index.ts`** - Cloudflare Worker entry point (fetch handler)
 - **`src/context.ts`** - Parses request URL to extract org/site/path and constructs EDS domain URL
-- **`src/html2json.ts`** - `HTMLConverter` class that converts HAST to JSON
 
 ### Request Flow
 
@@ -29,14 +28,11 @@ npm test         # Run tests (vitest run)
    - `tier`: `preview` (.page), `review` (.reviews), or `live` (.live)
 2. Context builds EDS URL: `https://main--{site}--{org}.aem.{tld}`
 3. Fetches HTML from EDS domain
-4. Parses HTML to HAST using unified/rehype-parse
-5. `HTMLConverter` extracts metadata from `da-form` block and converts blocks to JSON
+4. Uses `da-sc-sdk` `convertHtmlToJson` to convert the HTML into structured JSON
 
 ### Key Dependencies
 
-- **unified/rehype-parse** - HTML parsing to HAST
-- **hast-util-select** - CSS selector queries on HAST
-- **hast-util-to-html/to-string** - HAST output utilities
+- **da-sc-sdk** - DA Structured Content SDK used for HTML to JSON conversion
 
 ## Testing
 

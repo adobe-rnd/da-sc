@@ -1,11 +1,22 @@
 # da-sc
 
-A minimal tool for extracting and processing Edge Delivery Services HTML content from HTML to a generic JSON format.
+A Cloudflare Worker that fetches Edge Delivery Services (EDS) HTML and converts it to structured JSON.
 
-## Features
-- Extracts content, head, and main sections from HTML
-- Utilities for HTML parsing and manipulation
-- Generic JSON output
+The conversion is handled by `da-sc-sdk` (`convertHtmlToJson`), while this service focuses on request routing and EDS fetching.
 
-## Usage
-See the `src/` directory for main modules and usage examples.
+## Request format
+
+```
+/{tier}/{org}/{site}/{path}
+```
+
+- `tier`: `preview`, `review` or `live`
+- `org`: organization name
+- `site`: site name
+- `path`: content path on the EDS domain
+
+## Commands
+
+- `npm run dev` - start local development server
+- `npm run build` - build worker assets
+- `npm run test` - run tests
