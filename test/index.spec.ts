@@ -16,7 +16,7 @@ import worker from '../src';
 
 const mockedConvertHtmlToJson = vi.hoisted(() => vi.fn());
 
-vi.mock('da-sc-sdk', () => ({
+vi.mock('@adobe/da-sc-sdk', () => ({
   convertHtmlToJson: mockedConvertHtmlToJson,
 }));
 

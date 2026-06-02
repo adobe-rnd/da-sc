@@ -2,7 +2,7 @@
 
 A Cloudflare Worker that fetches Edge Delivery Services (EDS) HTML and converts it to structured JSON.
 
-The conversion is handled by `da-sc-sdk` (`convertHtmlToJson`), while this service focuses on request routing and EDS fetching.
+The conversion is handled by `@adobe/da-sc-sdk` (`convertHtmlToJson`), while this service focuses on request routing and EDS fetching.
 
 ## Request format
 

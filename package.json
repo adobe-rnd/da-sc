@@ -20,9 +20,6 @@
     "semantic-release": "semantic-release",
     "semantic-release-dry": "semantic-release --dry-run --no-ci --branches $CI_BRANCH"
   },
-  "dependencies": {
-    "da-sc-sdk": "https://codeload.github.com/adobe-rnd/da-sc-sdk/tar.gz/1e81c45ead0481027f4ca242eb5fa5de6d8d6ada"
-  },
   "devDependencies": {
     "@adobe/eslint-config-helix": "^2.0.8",
     "@cloudflare/vitest-pool-workers": "^0.8.53",
@@ -41,5 +38,8 @@
   },
   "lint-staged": {
     "*.{js,ts}": "eslint --fix"
+  },
+  "dependencies": {
+    "@adobe/da-sc-sdk": "^0.1.0"
   }
 }

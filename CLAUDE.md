@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-da-sc is a Cloudflare Worker that transforms Edge Delivery Services (EDS) HTML content into structured JSON. It fetches HTML from EDS domains and converts it using `da-sc-sdk`.
+da-sc is a Cloudflare Worker that transforms Edge Delivery Services (EDS) HTML content into structured JSON. It fetches HTML from EDS domains and converts it using `@adobe/da-sc-sdk`.
 
 ## Commands
 
@@ -28,11 +28,11 @@ npm test         # Run tests (vitest run)
    - `tier`: `preview` (.page), `review` (.reviews), or `live` (.live)
 2. Context builds EDS URL: `https://main--{site}--{org}.aem.{tld}`
 3. Fetches HTML from EDS domain
-4. Uses `da-sc-sdk` `convertHtmlToJson` to convert the HTML into structured JSON
+4. Uses `@adobe/da-sc-sdk` `convertHtmlToJson` to convert the HTML into structured JSON
 
 ### Key Dependencies
 
-- **da-sc-sdk** - DA Structured Content SDK used for HTML to JSON conversion
+- **@adobe/da-sc-sdk** - DA Structured Content SDK used for HTML to JSON conversion
 
 ## Testing
 
