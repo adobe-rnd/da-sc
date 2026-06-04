@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/adobe-rnd/da-sc/compare/v1.1.0...v1.2.0) (2026-06-04)
+
+
+### Features
+
+* use the pre-release version of da-sc-sdk ([#16](https://github.com/adobe-rnd/da-sc/issues/16)) ([6e46954](https://github.com/adobe-rnd/da-sc/commit/6e469548f7eca6ca7a24e2c564f85e5b2c4ff95e))
+
 # [1.1.0](https://github.com/adobe-rnd/da-sc/compare/v1.0.1...v1.1.0) (2026-05-05)
 
 
