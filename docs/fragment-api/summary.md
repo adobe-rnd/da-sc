@@ -4,8 +4,8 @@ A quick, readable overview of how the **da-sc worker** turns DA **Structured
 Content (SC)** into the **AEM Content Fragment** API shapes. For the exact,
 normative rules see the two specs:
 
-- **`mapping-spec-cf.md`** — SC document → Content Fragment (`getFragment`)
-- **`mapping-spec.cfm.md`** — SC schema → Content Fragment Model (`getModel`)
+- [**mapping-spec-cf.md**](./mapping-spec-cf.md) — SC document → Content Fragment (`getFragment`)
+- [**mapping-spec.cfm.md**](./mapping-spec.cfm.md) — SC schema → Content Fragment Model (`getModel`)
 
 Worked example (real worker output) lives in `examples/` — see the end.
 
