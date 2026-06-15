@@ -46,3 +46,6 @@ web_modules/
 
 # Optional stylelint cache
 .stylelintcache
+
+# Local scratch — not committed
+_tmp/
