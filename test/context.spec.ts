@@ -11,6 +11,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { getCtx } from '../src/context';
+import { synthesizeModel } from '../src/cf/identity';
 
 describe('getCtx', () => {
   it('maps preview tier to .page domain', () => {
@@ -20,7 +21,50 @@ describe('getCtx', () => {
       site: 'site',
       edsDomainUrl: 'https://main--site--org.aem.page',
       contentPath: 'path/to/doc',
+      tier: 'preview',
+      format: 'sc',
     });
+  });
+
+  it('defaults the format to sc', () => {
+    expect(getCtx('https://worker.example/live/org/site/path').format).toBe('sc');
+  });
+
+  it('parses the cf path form (fallback)', () => {
+    const ctx = getCtx('https://worker.example/cf/preview/org/site/blog/post');
+    expect(ctx).toEqual({
+      org: 'org',
+      site: 'site',
+      edsDomainUrl: 'https://main--site--org.aem.page',
+      contentPath: 'blog/post',
+      tier: 'preview',
+      format: 'cf',
+    });
+  });
+
+  it('decodes the cf id form (base64url fragment path)', () => {
+    const b64url = (s: string) => btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const id = b64url('/org/site/blog/post');
+    const ctx = getCtx(`https://worker.example/cf/preview/${id}`);
+    expect(ctx).toMatchObject({
+      org: 'org', site: 'site', contentPath: 'blog/post', tier: 'preview', format: 'cf',
+    });
+  });
+
+  it('decodes the cfm model id into org/site/schema/pointer', () => {
+    const { id } = synthesizeModel({ org: 'org', site: 'site' }, 'coffee-promotion', '/ctas');
+    const ctx = getCtx(`https://worker.example/cfm/live/${id}`);
+    expect(ctx).toMatchObject({
+      org: 'org',
+      site: 'site',
+      contentPath: 'coffee-promotion/ctas',
+      tier: 'live',
+      format: 'cfm',
+    });
+  });
+
+  it('throws when the cfm model id is missing', () => {
+    expect(() => getCtx('https://worker.example/cfm/live')).toThrow('/cfm/tier/{modelId}');
   });
 
   it('maps review tier to .reviews domain', () => {

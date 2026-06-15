@@ -11,6 +11,12 @@
  */
 import { convertHtmlToJson } from '@adobe/da-sc-sdk';
 import { getCtx } from './context.js';
+import { htmlToContentFragment } from './cf/pipeline.js';
+import { schemaToContentFragmentModel } from './cfm/pipeline.js';
+import type { ReferencesMode } from './cf/convert.js';
+
+/** Valid values for the `references` query parameter. */
+const REFERENCES_MODES: ReferencesMode[] = ['none', 'direct', 'direct-hydrated', 'all', 'all-hydrated'];
 
 /**
  * Returns `Authorization` only for the `token` scheme (`Authorization: token <secret>`).
@@ -51,8 +57,39 @@ export default {
         });
       }
       const ctx = getCtx(request.url);
-      const edsContentUrl = `${ctx.edsDomainUrl}/${ctx.contentPath}`;
       const tokenAuth = getAuthorizationToken(request);
+
+      const jsonHeaders: Record<string, string> = {
+        ...corsHeaders,
+        'Content-Type': 'application/json; charset=utf-8',
+      };
+      if (tokenAuth) {
+        jsonHeaders['Cache-Control'] = 'private, no-store';
+      }
+
+      // The Content Fragment Model route needs only the schema, not the EDS
+      // document — handle it before fetching anything from EDS. `getCtx` has
+      // decoded the model id into `{schemaName}{pointer}` (carried in contentPath).
+      if (ctx.format === 'cfm') {
+        const [schemaName, ...pointerSegments] = ctx.contentPath.split('/').filter(Boolean);
+        const cfm = await schemaToContentFragmentModel({
+          identity: { org: ctx.org, site: ctx.site },
+          schemaName,
+          pointer: pointerSegments.length ? `/${pointerSegments.join('/')}` : '',
+          authorization: tokenAuth,
+        });
+        if (cfm.error) {
+          return new Response(`Failed to build Content Fragment Model: ${cfm.error}`, {
+            status: 500,
+            headers: corsHeaders,
+          });
+        }
+        return new Response(JSON.stringify(cfm.model, null, 2), {
+          headers: jsonHeaders,
+        });
+      }
+
+      const edsContentUrl = `${ctx.edsDomainUrl}/${ctx.contentPath}`;
       const edsResp = await fetch(edsContentUrl, {
         cf: { scrapeShield: false },
         ...(tokenAuth ? { headers: { Authorization: tokenAuth } } : {}),
@@ -78,6 +115,34 @@ export default {
       }
 
       const html = await edsResp.text();
+
+      if (ctx.format === 'cf') {
+        const refParam = new URL(request.url).searchParams.get('references') ?? undefined;
+        if (refParam && !REFERENCES_MODES.includes(refParam as ReferencesMode)) {
+          return new Response(
+            JSON.stringify({ error: `Invalid references value: ${refParam}` }),
+            { status: 400, headers: jsonHeaders },
+          );
+        }
+        const cf = await htmlToContentFragment({
+          html,
+          identity: {
+            org: ctx.org, site: ctx.site, path: ctx.contentPath, tier: ctx.tier,
+          },
+          referencesMode: refParam as ReferencesMode | undefined,
+          authorization: tokenAuth,
+        });
+        if (cf.error) {
+          return new Response(`Failed to convert to Content Fragment: ${cf.error}`, {
+            status: 500,
+            headers: corsHeaders,
+          });
+        }
+        return new Response(JSON.stringify(cf.fragment, null, 2), {
+          headers: jsonHeaders,
+        });
+      }
+
       const conversion = convertHtmlToJson({ html });
       if ('error' in conversion) {
         return new Response(`Failed to convert EDS HTML: ${conversion.error}`, {
@@ -86,14 +151,6 @@ export default {
         });
       }
       const { json } = conversion;
-
-      const jsonHeaders: Record<string, string> = {
-        ...corsHeaders,
-        'Content-Type': 'application/json; charset=utf-8',
-      };
-      if (tokenAuth) {
-        jsonHeaders['Cache-Control'] = 'private, no-store';
-      }
 
       return new Response(JSON.stringify(json, null, 2), {
         headers: jsonHeaders,
