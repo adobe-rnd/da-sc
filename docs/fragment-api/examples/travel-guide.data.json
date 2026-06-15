@@ -1,0 +1,58 @@
+{
+  "metadata": { "schemaName": "travel-guide", "title": "48 Hours in Lisbon" },
+  "data": {
+    "title": "48 Hours in Lisbon",
+    "slug": "48-hours-in-lisbon",
+    "subtitle": "A fast, soulful weekend through Portugal's hill-and-tile capital",
+    "season": "spring",
+    "budgetLevel": "midrange",
+    "recommendedDays": 2,
+    "averageRating": 4.7,
+    "estimatedCostUsd": 480.5,
+    "familyFriendly": true,
+    "visaRequired": false,
+    "tags": ["portugal", "city-break", "food", "architecture", "viewpoints"],
+    "languagesSpoken": ["Portuguese", "English"],
+    "travelStyles": ["solo", "couple", "family"],
+    "destination": { "city": "Lisbon", "country": "Portugal", "neighborhood": "Alfama" },
+    "author": {
+      "name": "Mara Quintela",
+      "bio": "Lisbon-based travel writer who has spent a decade getting happily lost in the Alfama's staircases and miradouros.",
+      "social": { "twitter": "@maraq", "website": "https://maraquintela.example" }
+    },
+    "sections": [
+      {
+        "heading": "Morning: Alfama & São Jorge Castle",
+        "body": "Start before the crowds. Wind uphill through Alfama's tangled lanes to São Jorge Castle for the city's best panorama, then drift down past tiled facades and pause for a bica (espresso) at a tiny corner cafe.",
+        "order": 1
+      },
+      {
+        "heading": "Afternoon: Tram 28, Tarts & Tiles",
+        "body": "Ride the rattling Tram 28 across the old districts, queue for a warm pastel de nata in Belém, and lose an hour in the National Tile Museum admiring centuries of azulejos.",
+        "order": 2
+      },
+      {
+        "heading": "Evening: Fado in the Old Town",
+        "body": "As the lamps come on, settle into a small Alfama tavern for grilled sardines and a glass of vinho verde, then let live Fado — Lisbon's melancholy soul music — carry you into the night.",
+        "order": 3
+      }
+    ],
+    "highlights": [
+      {
+        "name": "São Jorge Castle",
+        "description": "Hilltop Moorish fortress with sweeping views over the red rooftops and the Tagus river.",
+        "mustSee": true
+      },
+      {
+        "name": "Time Out Market",
+        "description": "A buzzing food hall gathering many of Lisbon's best chefs and producers under one roof.",
+        "mustSee": true
+      },
+      {
+        "name": "Tram 28",
+        "description": "A vintage yellow tram that clatters through the most scenic historic neighbourhoods.",
+        "mustSee": false
+      }
+    ]
+  }
+}

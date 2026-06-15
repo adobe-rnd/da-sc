@@ -1,0 +1,495 @@
+{
+  "id": "L29yZy9zaXRlL2Zvcm1zL29wZW5hcGkvdHJhdmVsLWd1aWRl",
+  "path": "/org/site/forms/openapi/travel-guide",
+  "title": "travel-guide",
+  "model": {
+    "id": "L29yZy9zaXRlLy5kYS9mb3Jtcy9zY2hlbWFzL3RyYXZlbC1ndWlkZQ",
+    "path": "/org/site/.da/forms/schemas/travel-guide",
+    "name": "Travel Guide"
+  },
+  "status": "PUBLISHED",
+  "created": {},
+  "fields": [
+    {
+      "name": "title",
+      "type": "text",
+      "multiple": false,
+      "values": [
+        "48 Hours in Lisbon"
+      ]
+    },
+    {
+      "name": "slug",
+      "type": "text",
+      "multiple": false,
+      "values": [
+        "48-hours-in-lisbon"
+      ]
+    },
+    {
+      "name": "subtitle",
+      "type": "text",
+      "multiple": false,
+      "values": [
+        "A fast, soulful weekend through Portugal's hill-and-tile capital"
+      ]
+    },
+    {
+      "name": "season",
+      "type": "enumeration",
+      "multiple": false,
+      "values": [
+        "spring"
+      ]
+    },
+    {
+      "name": "budgetLevel",
+      "type": "enumeration",
+      "multiple": false,
+      "values": [
+        "midrange"
+      ]
+    },
+    {
+      "name": "recommendedDays",
+      "type": "number",
+      "multiple": false,
+      "values": [
+        2
+      ]
+    },
+    {
+      "name": "averageRating",
+      "type": "float-number",
+      "multiple": false,
+      "values": [
+        4.7
+      ]
+    },
+    {
+      "name": "estimatedCostUsd",
+      "type": "float-number",
+      "multiple": false,
+      "values": [
+        480.5
+      ]
+    },
+    {
+      "name": "familyFriendly",
+      "type": "boolean",
+      "multiple": false,
+      "values": [
+        true
+      ]
+    },
+    {
+      "name": "visaRequired",
+      "type": "boolean",
+      "multiple": false,
+      "values": [
+        false
+      ]
+    },
+    {
+      "name": "tags",
+      "type": "text",
+      "multiple": true,
+      "values": [
+        "portugal",
+        "city-break",
+        "food",
+        "architecture",
+        "viewpoints"
+      ]
+    },
+    {
+      "name": "languagesSpoken",
+      "type": "text",
+      "multiple": true,
+      "values": [
+        "Portuguese",
+        "English"
+      ]
+    },
+    {
+      "name": "travelStyles",
+      "type": "enumeration",
+      "multiple": true,
+      "values": [
+        "solo",
+        "couple",
+        "family"
+      ]
+    },
+    {
+      "name": "destination",
+      "type": "content-fragment",
+      "multiple": false,
+      "values": [
+        "/org/site/forms/openapi/travel-guide/destination"
+      ]
+    },
+    {
+      "name": "author",
+      "type": "content-fragment",
+      "multiple": false,
+      "values": [
+        "/org/site/forms/openapi/travel-guide/author"
+      ]
+    },
+    {
+      "name": "sections",
+      "type": "content-fragment",
+      "multiple": true,
+      "values": [
+        "/org/site/forms/openapi/travel-guide/sections/0",
+        "/org/site/forms/openapi/travel-guide/sections/1",
+        "/org/site/forms/openapi/travel-guide/sections/2"
+      ]
+    },
+    {
+      "name": "highlights",
+      "type": "content-fragment",
+      "multiple": true,
+      "values": [
+        "/org/site/forms/openapi/travel-guide/highlights/0",
+        "/org/site/forms/openapi/travel-guide/highlights/1",
+        "/org/site/forms/openapi/travel-guide/highlights/2"
+      ]
+    }
+  ],
+  "variations": [],
+  "references": [
+    {
+      "type": "content-fragment",
+      "path": "/org/site/forms/openapi/travel-guide/destination",
+      "id": "L29yZy9zaXRlL2Zvcm1zL29wZW5hcGkvdHJhdmVsLWd1aWRlL2Rlc3RpbmF0aW9u",
+      "fieldName": "destination",
+      "title": "Location",
+      "model": {
+        "id": "L29yZy9zaXRlLy5kYS9mb3Jtcy9zY2hlbWFzL3RyYXZlbC1ndWlkZS9kZXN0aW5hdGlvbg",
+        "path": "/org/site/.da/forms/schemas/travel-guide/destination",
+        "name": "Location"
+      },
+      "fields": [
+        {
+          "name": "city",
+          "type": "text",
+          "multiple": false,
+          "values": [
+            "Lisbon"
+          ]
+        },
+        {
+          "name": "country",
+          "type": "text",
+          "multiple": false,
+          "values": [
+            "Portugal"
+          ]
+        },
+        {
+          "name": "neighborhood",
+          "type": "text",
+          "multiple": false,
+          "values": [
+            "Alfama"
+          ]
+        }
+      ],
+      "references": [],
+      "variations": [],
+      "tags": []
+    },
+    {
+      "type": "content-fragment",
+      "path": "/org/site/forms/openapi/travel-guide/author",
+      "id": "L29yZy9zaXRlL2Zvcm1zL29wZW5hcGkvdHJhdmVsLWd1aWRlL2F1dGhvcg",
+      "fieldName": "author",
+      "title": "Author",
+      "model": {
+        "id": "L29yZy9zaXRlLy5kYS9mb3Jtcy9zY2hlbWFzL3RyYXZlbC1ndWlkZS9hdXRob3I",
+        "path": "/org/site/.da/forms/schemas/travel-guide/author",
+        "name": "Author"
+      },
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "multiple": false,
+          "values": [
+            "Mara Quintela"
+          ]
+        },
+        {
+          "name": "bio",
+          "type": "text",
+          "multiple": false,
+          "values": [
+            "Lisbon-based travel writer who has spent a decade getting happily lost in the Alfama's staircases and miradouros."
+          ]
+        },
+        {
+          "name": "social",
+          "type": "content-fragment",
+          "multiple": false,
+          "values": [
+            "/org/site/forms/openapi/travel-guide/author/social"
+          ]
+        }
+      ],
+      "references": [],
+      "variations": [],
+      "tags": []
+    },
+    {
+      "type": "content-fragment",
+      "path": "/org/site/forms/openapi/travel-guide/sections/0",
+      "id": "L29yZy9zaXRlL2Zvcm1zL29wZW5hcGkvdHJhdmVsLWd1aWRlL3NlY3Rpb25zLzA",
+      "fieldName": "sections",
+      "title": "Section",
+      "model": {
+        "id": "L29yZy9zaXRlLy5kYS9mb3Jtcy9zY2hlbWFzL3RyYXZlbC1ndWlkZS9zZWN0aW9ucw",
+        "path": "/org/site/.da/forms/schemas/travel-guide/sections",
+        "name": "Section"
+      },
+      "fields": [
+        {
+          "name": "heading",
+          "type": "text",
+          "multiple": false,
+          "values": [
+            "Morning: Alfama & São Jorge Castle"
+          ]
+        },
+        {
+          "name": "body",
+          "type": "text",
+          "multiple": false,
+          "values": [
+            "Start before the crowds. Wind uphill through Alfama's tangled lanes to São Jorge Castle for the city's best panorama, then drift down past tiled facades and pause for a bica (espresso) at a tiny corner cafe."
+          ]
+        },
+        {
+          "name": "order",
+          "type": "number",
+          "multiple": false,
+          "values": [
+            1
+          ]
+        }
+      ],
+      "references": [],
+      "variations": [],
+      "tags": []
+    },
+    {
+      "type": "content-fragment",
+      "path": "/org/site/forms/openapi/travel-guide/sections/1",
+      "id": "L29yZy9zaXRlL2Zvcm1zL29wZW5hcGkvdHJhdmVsLWd1aWRlL3NlY3Rpb25zLzE",
+      "fieldName": "sections",
+      "title": "Section",
+      "model": {
+        "id": "L29yZy9zaXRlLy5kYS9mb3Jtcy9zY2hlbWFzL3RyYXZlbC1ndWlkZS9zZWN0aW9ucw",
+        "path": "/org/site/.da/forms/schemas/travel-guide/sections",
+        "name": "Section"
+      },
+      "fields": [
+        {
+          "name": "heading",
+          "type": "text",
+          "multiple": false,
+          "values": [
+            "Afternoon: Tram 28, Tarts & Tiles"
+          ]
+        },
+        {
+          "name": "body",
+          "type": "text",
+          "multiple": false,
+          "values": [
+            "Ride the rattling Tram 28 across the old districts, queue for a warm pastel de nata in Belém, and lose an hour in the National Tile Museum admiring centuries of azulejos."
+          ]
+        },
+        {
+          "name": "order",
+          "type": "number",
+          "multiple": false,
+          "values": [
+            2
+          ]
+        }
+      ],
+      "references": [],
+      "variations": [],
+      "tags": []
+    },
+    {
+      "type": "content-fragment",
+      "path": "/org/site/forms/openapi/travel-guide/sections/2",
+      "id": "L29yZy9zaXRlL2Zvcm1zL29wZW5hcGkvdHJhdmVsLWd1aWRlL3NlY3Rpb25zLzI",
+      "fieldName": "sections",
+      "title": "Section",
+      "model": {
+        "id": "L29yZy9zaXRlLy5kYS9mb3Jtcy9zY2hlbWFzL3RyYXZlbC1ndWlkZS9zZWN0aW9ucw",
+        "path": "/org/site/.da/forms/schemas/travel-guide/sections",
+        "name": "Section"
+      },
+      "fields": [
+        {
+          "name": "heading",
+          "type": "text",
+          "multiple": false,
+          "values": [
+            "Evening: Fado in the Old Town"
+          ]
+        },
+        {
+          "name": "body",
+          "type": "text",
+          "multiple": false,
+          "values": [
+            "As the lamps come on, settle into a small Alfama tavern for grilled sardines and a glass of vinho verde, then let live Fado — Lisbon's melancholy soul music — carry you into the night."
+          ]
+        },
+        {
+          "name": "order",
+          "type": "number",
+          "multiple": false,
+          "values": [
+            3
+          ]
+        }
+      ],
+      "references": [],
+      "variations": [],
+      "tags": []
+    },
+    {
+      "type": "content-fragment",
+      "path": "/org/site/forms/openapi/travel-guide/highlights/0",
+      "id": "L29yZy9zaXRlL2Zvcm1zL29wZW5hcGkvdHJhdmVsLWd1aWRlL2hpZ2hsaWdodHMvMA",
+      "fieldName": "highlights",
+      "title": "Highlight",
+      "model": {
+        "id": "L29yZy9zaXRlLy5kYS9mb3Jtcy9zY2hlbWFzL3RyYXZlbC1ndWlkZS9oaWdobGlnaHRz",
+        "path": "/org/site/.da/forms/schemas/travel-guide/highlights",
+        "name": "Highlight"
+      },
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "multiple": false,
+          "values": [
+            "São Jorge Castle"
+          ]
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "multiple": false,
+          "values": [
+            "Hilltop Moorish fortress with sweeping views over the red rooftops and the Tagus river."
+          ]
+        },
+        {
+          "name": "mustSee",
+          "type": "boolean",
+          "multiple": false,
+          "values": [
+            true
+          ]
+        }
+      ],
+      "references": [],
+      "variations": [],
+      "tags": []
+    },
+    {
+      "type": "content-fragment",
+      "path": "/org/site/forms/openapi/travel-guide/highlights/1",
+      "id": "L29yZy9zaXRlL2Zvcm1zL29wZW5hcGkvdHJhdmVsLWd1aWRlL2hpZ2hsaWdodHMvMQ",
+      "fieldName": "highlights",
+      "title": "Highlight",
+      "model": {
+        "id": "L29yZy9zaXRlLy5kYS9mb3Jtcy9zY2hlbWFzL3RyYXZlbC1ndWlkZS9oaWdobGlnaHRz",
+        "path": "/org/site/.da/forms/schemas/travel-guide/highlights",
+        "name": "Highlight"
+      },
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "multiple": false,
+          "values": [
+            "Time Out Market"
+          ]
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "multiple": false,
+          "values": [
+            "A buzzing food hall gathering many of Lisbon's best chefs and producers under one roof."
+          ]
+        },
+        {
+          "name": "mustSee",
+          "type": "boolean",
+          "multiple": false,
+          "values": [
+            true
+          ]
+        }
+      ],
+      "references": [],
+      "variations": [],
+      "tags": []
+    },
+    {
+      "type": "content-fragment",
+      "path": "/org/site/forms/openapi/travel-guide/highlights/2",
+      "id": "L29yZy9zaXRlL2Zvcm1zL29wZW5hcGkvdHJhdmVsLWd1aWRlL2hpZ2hsaWdodHMvMg",
+      "fieldName": "highlights",
+      "title": "Highlight",
+      "model": {
+        "id": "L29yZy9zaXRlLy5kYS9mb3Jtcy9zY2hlbWFzL3RyYXZlbC1ndWlkZS9oaWdobGlnaHRz",
+        "path": "/org/site/.da/forms/schemas/travel-guide/highlights",
+        "name": "Highlight"
+      },
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "multiple": false,
+          "values": [
+            "Tram 28"
+          ]
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "multiple": false,
+          "values": [
+            "A vintage yellow tram that clatters through the most scenic historic neighbourhoods."
+          ]
+        },
+        {
+          "name": "mustSee",
+          "type": "boolean",
+          "multiple": false,
+          "values": [
+            false
+          ]
+        }
+      ],
+      "references": [],
+      "variations": [],
+      "tags": []
+    }
+  ],
+  "tags": [],
+  "fieldTags": [],
+  "validationStatus": []
+}
