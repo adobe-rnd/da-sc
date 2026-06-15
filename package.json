@@ -14,6 +14,7 @@
     "deploy": "wrangler deploy",
     "deploy:ci": "node prepare-deploy.js && wrangler deploy -e ci -c wrangler-versioned.toml",
     "deploy:production": "node prepare-deploy.js && wrangler deploy -e production -c wrangler-versioned.toml",
+    "deploy:cf": "node prepare-deploy.js && wrangler deploy -e cf -c wrangler-versioned.toml",
     "lint": "eslint .",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage --coverage.provider=istanbul --coverage.include=src/**",

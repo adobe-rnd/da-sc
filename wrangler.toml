@@ -21,3 +21,12 @@ name = "da-sc"
 [env.production.vars]
 VERSION = "@@VERSION@@"
 ENVIRONMENT = "production"
+
+# Fragment API (cf) test environment — standalone deploy target for trying the
+# /cf and /cfm routes without touching dev or production.
+[env.cf]
+name = "da-sc-cf"
+workers_dev = true
+[env.cf.vars]
+VERSION = "@@VERSION@@-cf"
+ENVIRONMENT = "cf"
