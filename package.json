@@ -1,6 +1,6 @@
 {
   "name": "da-sc",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Transform Edge Delivery Services HTML into a structured JSON representation.",
   "main": "src/index.js",
   "type": "module",
