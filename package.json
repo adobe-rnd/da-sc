@@ -40,6 +40,6 @@
     "*.{js,ts}": "eslint --fix"
   },
   "dependencies": {
-    "@adobe/da-sc-sdk": "^0.1.0"
+    "@adobe/da-sc-sdk": "^0.1.2"
   }
 }
