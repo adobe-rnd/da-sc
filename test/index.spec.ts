@@ -333,18 +333,18 @@ describe('da-sc worker', () => {
 
   it('filters indexed paths before pagination and hydrates only matching pages', async () => {
     const fetchSpy = mockIndexedPages([
-      '/forms/citizens/cards/one',
-      'forms/citizens/cards/two',
-      '/forms/citizens/insights/alpha',
-      '/forms/citizens/cards-other/not-a-card',
-      '/forms/citizens/cards/three',
+      '/forms/demo/cards/one',
+      'forms/demo/cards/two',
+      '/forms/demo/insights/alpha',
+      '/forms/demo/cards-other/not-a-card',
+      '/forms/demo/cards/three',
     ]);
-    const prefix = 'path=%2Fforms%2Fcitizens%2Fcards%2F';
+    const prefix = 'path=%2Fforms%2Fdemo%2Fcards%2F';
 
     const first = await runListRequest(`?${prefix}&limit=2`);
     const firstPage = await first.json() as { cursor: string };
     expect(firstPage).toMatchObject({
-      items: [{ path: '/forms/citizens/cards/one' }, { path: 'forms/citizens/cards/two' }],
+      items: [{ path: '/forms/demo/cards/one' }, { path: 'forms/demo/cards/two' }],
       count: 2,
       total: 3,
       offset: 0,
@@ -354,14 +354,14 @@ describe('da-sc worker', () => {
     });
     expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual([
       'https://main--site--org.aem.page/structured-content-index.json?offset=0&limit=1000',
-      'https://main--site--org.aem.page/forms/citizens/cards/one',
-      'https://main--site--org.aem.page/forms/citizens/cards/two',
+      'https://main--site--org.aem.page/forms/demo/cards/one',
+      'https://main--site--org.aem.page/forms/demo/cards/two',
     ]);
 
-    const second = await runListRequest(`?path=forms%2Fcitizens%2Fcards%2F&cursor=${firstPage.cursor}&limit=2`);
+    const second = await runListRequest(`?path=forms%2Fdemo%2Fcards%2F&cursor=${firstPage.cursor}&limit=2`);
     const secondPage = await second.json();
     expect(secondPage).toMatchObject({
-      items: [{ path: '/forms/citizens/cards/three' }],
+      items: [{ path: '/forms/demo/cards/three' }],
       count: 1,
       total: 3,
       offset: 2,
@@ -371,14 +371,14 @@ describe('da-sc worker', () => {
     expect(secondPage).not.toHaveProperty('cursor');
     expect(fetchSpy).toHaveBeenCalledTimes(5);
     expect(fetchSpy.mock.calls.map(([url]) => url)).not.toContain(
-      'https://main--site--org.aem.page/forms/citizens/insights/alpha',
+      'https://main--site--org.aem.page/forms/demo/insights/alpha',
     );
   });
 
   it('returns an empty filtered page when no paths match', async () => {
-    const fetchSpy = mockIndexedPages(['/forms/citizens/cards/one', '/forms/citizens/insights/two']);
+    const fetchSpy = mockIndexedPages(['/forms/demo/cards/one', '/forms/demo/insights/two']);
 
-    const response = await runListRequest('?path=%2Fforms%2Fcitizens%2Fbanner%2F');
+    const response = await runListRequest('?path=%2Fforms%2Fdemo%2Fbanner%2F');
 
     expect(await response.json()).toEqual({
       items: [], count: 0, total: 0, offset: 0, limit: 10, nextOffset: null,

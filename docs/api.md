@@ -97,35 +97,35 @@ Each item contains its original `path` and either `json` or an `error` with a nu
 
 ### Browse the next page
 
-Start with a GET request without a cursor.
+For a site with an index, start with a GET request without a cursor. The names below are illustrative.
 
 ```bash
-curl 'http://127.0.0.1:8787/live/exp-workspace/frescopa?limit=2'
+curl 'http://127.0.0.1:8787/live/demo-org/demo-site?limit=2'
 ```
 
-The first page of the current Frescopa index returns two items. These fields from its response include the cursor for the next page.
+For an example index with four entries, the first page returns two items. These fields from its response include the cursor for the next page.
 
 ```json
 {
   "count": 2,
-  "total": 7,
-  "cursor": "eyJ2ZXJzaW9uIjoxLCJvZmZzZXQiOjIsInNjb3BlIjoiL2xpdmUvZXhwLXdvcmtzcGFjZS9mcmVzY29wYSJ9"
+  "total": 4,
+  "cursor": "eyJ2ZXJzaW9uIjoxLCJvZmZzZXQiOjIsInNjb3BlIjoiL2xpdmUvZGVtby1vcmcvZGVtby1zaXRlIn0"
 }
 ```
 
 Pass the cursor back unchanged to browse the next two items.
 
 ```bash
-curl 'http://127.0.0.1:8787/live/exp-workspace/frescopa?cursor=eyJ2ZXJzaW9uIjoxLCJvZmZzZXQiOjIsInNjb3BlIjoiL2xpdmUvZXhwLXdvcmtzcGFjZS9mcmVzY29wYSJ9&limit=2'
+curl 'http://127.0.0.1:8787/live/demo-org/demo-site?cursor=eyJ2ZXJzaW9uIjoxLCJvZmZzZXQiOjIsInNjb3BlIjoiL2xpdmUvZGVtby1vcmcvZGVtby1zaXRlIn0&limit=2'
 ```
 
 That page contains the third and fourth indexed paths. Continue using each returned `cursor` until it is omitted.
 
-To browse only Frescopa card documents, include the encoded prefix in both requests.
+To browse only demo card documents, include the encoded prefix in both requests.
 
 ```bash
-curl 'http://127.0.0.1:8787/live/exp-workspace/frescopa?path=%2Fforms%2Fcitizens%2Fcards%2F&limit=2'
-curl 'http://127.0.0.1:8787/live/exp-workspace/frescopa?path=%2Fforms%2Fcitizens%2Fcards%2F&cursor=<returned-cursor>&limit=2'
+curl 'http://127.0.0.1:8787/live/demo-org/demo-site?path=%2Fforms%2Fdemo%2Fcards%2F&limit=2'
+curl 'http://127.0.0.1:8787/live/demo-org/demo-site?path=%2Fforms%2Fdemo%2Fcards%2F&cursor=<returned-cursor>&limit=2'
 ```
 
 The second request uses the `cursor` from the first filtered response. Its `total`, `count`, and next cursor refer only to matching card paths. A prefix with no matches returns `items: []`, `count: 0`, and `total: 0` without a cursor. The numeric `offset` and `nextOffset` fields remain available for existing clients, but new clients should use `cursor`. Filtering by schema or title is not supported yet.
