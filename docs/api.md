@@ -1,6 +1,6 @@
 # API reference
 
-The worker supports read operations only. Both endpoints use `GET`, and clients do not supply a list of paths.
+The worker supports read operations only. Both endpoints use `GET`, and clients do not supply a list of paths. The list endpoint accepts an optional path-prefix filter.
 
 | Operation | Method | Path |
 | --- | --- | --- |
@@ -35,9 +35,11 @@ Fetches one EDS HTML page and returns its converted JSON. The `path` parameter i
 
 Fetches `structured-content-index.json` from the selected EDS site, then fetches and converts a page of indexed paths. The index uses the EDS JSON dump format with `total` and a `data` array of objects containing `path`. Clients do not send a request body or page paths.
 
-Pagination follows the [AEM Content Fragment Delivery list convention](https://developer.adobe.com/experience-cloud/experience-manager-apis/api/stable/contentfragments/delivery/#operation/fragments/getFragments). Start without a cursor, then pass the returned opaque `cursor` on the next request. A response without `cursor` is the last page. Use a cursor only with the same tier, organization, and site. It represents a position in the current index, not a frozen snapshot if the index changes between requests.
+Pagination follows the [AEM Content Fragment Delivery list convention](https://developer.adobe.com/experience-cloud/experience-manager-apis/api/stable/contentfragments/delivery/#operation/fragments/getFragments). Start without a cursor, then pass the returned opaque `cursor` on the next request. A response without `cursor` is the last page. Use a cursor only with the same tier, organization, site, and path filter. It represents a position in the current index, not a frozen snapshot if the index changes between requests.
 
 The worker forwards the resolved offset and `limit` to the EDS index. If the index serves a complete dump without applying those parameters, the worker slices it locally. An incomplete or malformed index is reported as an error instead of producing an incorrect page.
+
+When `path` is present, the worker scans index rows, matches the site-relative prefix, and paginates the matching collection. A leading slash is optional in the query and in index entries. The original indexed path is preserved in each item. Use a trailing slash when matching a directory to avoid similarly named siblings. Only the selected matching documents are fetched and converted. Without `path`, the existing unfiltered behavior is unchanged.
 
 ```json
 {
@@ -54,6 +56,7 @@ The worker forwards the resolved offset and `limit` to the EDS index. If the ind
 | --- | --- | --- | --- |
 | `cursor` | Opaque string | Omitted | Use the value from a previous list response. Cannot be combined with `offset`. |
 | `limit` | Integer | `10` | Between 1 and 50. |
+| `path` | Site-relative path prefix | Omitted | Filters indexed paths before pagination. Resend the same prefix with each cursor. |
 | `offset` | Integer | `0` | Legacy numeric pagination. Zero or greater. Cannot be combined with `cursor`. |
 
 ### Responses
@@ -61,7 +64,7 @@ The worker forwards the resolved offset and `limit` to the EDS index. If the ind
 | Status | Content type | Response |
 | --- | --- | --- |
 | `200` | `application/json` | A page of successful conversions and per-path errors. |
-| `400` | `application/json` | `{"error":"..."}` for invalid pagination or unsupported query parameters. |
+| `400` | `application/json` | `{"error":"..."}` for invalid pagination, path prefix, or unsupported query parameters. |
 | Upstream error status | `application/json` | `{"error":"..."}` when the EDS index cannot be retrieved. |
 | `502` | `application/json` | `{"error":"..."}` when the index is invalid or cannot be read. |
 | `500` | `application/json` | `{"error":"..."}` for an unexpected worker error. |
@@ -72,7 +75,7 @@ Each item contains its original `path` and either `json` or an `error` with a nu
 | --- | --- |
 | `items` | Conversions and errors for the selected page. |
 | `count` | Number of returned items, including errors. |
-| `total` | Number of paths reported by the EDS index. |
+| `total` | Number of matching paths when filtered, otherwise the EDS index total. |
 | `limit` | Requested page size. |
 | `cursor` | Opaque string for the next page. Omitted when there are no more items. |
 | `offset` | Starting index of this page, retained for legacy clients. |
@@ -116,4 +119,13 @@ Pass the cursor back unchanged to browse the next two items.
 curl 'http://127.0.0.1:8787/live/exp-workspace/frescopa?cursor=eyJ2ZXJzaW9uIjoxLCJvZmZzZXQiOjIsInNjb3BlIjoiL2xpdmUvZXhwLXdvcmtzcGFjZS9mcmVzY29wYSJ9&limit=2'
 ```
 
-That page contains the third and fourth indexed paths. Continue using each returned `cursor` until it is omitted. The numeric `offset` and `nextOffset` fields remain available for existing clients, but new clients should use `cursor`. Filtering by path, schema, or title is not supported yet.
+That page contains the third and fourth indexed paths. Continue using each returned `cursor` until it is omitted.
+
+To browse only Frescopa card documents, include the encoded prefix in both requests.
+
+```bash
+curl 'http://127.0.0.1:8787/live/exp-workspace/frescopa?path=%2Fforms%2Fcitizens%2Fcards%2F&limit=2'
+curl 'http://127.0.0.1:8787/live/exp-workspace/frescopa?path=%2Fforms%2Fcitizens%2Fcards%2F&cursor=<returned-cursor>&limit=2'
+```
+
+The second request uses the `cursor` from the first filtered response. Its `total`, `count`, and next cursor refer only to matching card paths. A prefix with no matches returns `items: []`, `count: 0`, and `total: 0` without a cursor. The numeric `offset` and `nextOffset` fields remain available for existing clients, but new clients should use `cursor`. Filtering by schema or title is not supported yet.

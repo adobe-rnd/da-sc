@@ -16,8 +16,130 @@ import {
   HEADER_NAMES, HTTP_STATUS, NOT_FOUND_ERROR,
 } from '../../http.js';
 import {
-  EDS_INDEX_FILENAME, encodeCursor, InvalidListError, parseIndexPage, parseListPagination,
+  EDS_INDEX_FILENAME, encodeCursor, type IndexPage, InvalidListError, matchesPathPrefix,
+  parseIndexPage, parseListPagination,
 } from './validation.js';
+
+const INDEX_SCAN_PAGE_SIZE = 1000;
+
+type IndexFetchResult = { page: IndexPage } | { error: Response };
+
+function indexError(
+  message: string,
+  status: number,
+  headers: Record<string, string>,
+): IndexFetchResult {
+  return { error: new Response(JSON.stringify({ error: message }), { status, headers }) };
+}
+
+async function fetchIndexPage(
+  edsDomainUrl: string,
+  tokenAuth: string | undefined,
+  offset: number,
+  limit: number,
+): Promise<IndexFetchResult> {
+  const indexUrl = new URL(getEdsUrl(edsDomainUrl, EDS_INDEX_FILENAME));
+  indexUrl.searchParams.set('offset', String(offset));
+  indexUrl.searchParams.set('limit', String(limit));
+
+  let indexResponse: Response;
+  try {
+    indexResponse = await fetchEdsPage(indexUrl.toString(), tokenAuth);
+  } catch (error) {
+    return indexError(
+      `Failed to fetch EDS index: ${errorMessage(error)}`,
+      HTTP_STATUS.BAD_GATEWAY,
+      getJsonHeaders(tokenAuth),
+    );
+  }
+
+  if (!indexResponse.ok) {
+    let message: string;
+    try {
+      message = indexResponse.status === HTTP_STATUS.NOT_FOUND
+        ? NOT_FOUND_ERROR
+        : await indexResponse.text();
+    } catch (error) {
+      return indexError(
+        `Failed to read EDS index: ${errorMessage(error)}`,
+        HTTP_STATUS.BAD_GATEWAY,
+        getJsonHeaders(tokenAuth),
+      );
+    }
+
+    const headers = getUpstreamErrorHeaders(tokenAuth);
+
+    const xError = indexResponse.headers.get(HEADER_NAMES.X_ERROR);
+    if (xError) headers[HEADER_NAMES.X_ERROR] = xError;
+    return indexError(message, indexResponse.status, headers);
+  }
+
+  let indexBody: unknown;
+  try {
+    indexBody = await indexResponse.json();
+  } catch (error) {
+    return indexError(
+      `Failed to read EDS index JSON: ${errorMessage(error)}`,
+      HTTP_STATUS.BAD_GATEWAY,
+      getJsonHeaders(tokenAuth),
+    );
+  }
+
+  let indexPage;
+  try {
+    indexPage = parseIndexPage(indexBody, offset, limit);
+  } catch (error) {
+    if (!(error instanceof InvalidListError)) throw error;
+    return indexError(
+      `Invalid EDS index: ${errorMessage(error)}`,
+      HTTP_STATUS.BAD_GATEWAY,
+      getJsonHeaders(tokenAuth),
+    );
+  }
+
+  return { page: indexPage };
+}
+
+async function scanFilteredIndex(
+  edsDomainUrl: string,
+  tokenAuth: string | undefined,
+  prefix: string,
+  offset: number,
+  limit: number,
+): Promise<IndexFetchResult> {
+  let filteredTotal = 0;
+  let sourceTotal: number | undefined;
+  const paths: string[] = [];
+
+  async function scan(indexOffset: number): Promise<IndexFetchResult> {
+    const result = await fetchIndexPage(edsDomainUrl, tokenAuth, indexOffset, INDEX_SCAN_PAGE_SIZE);
+    if ('error' in result) return result;
+
+    const { page } = result;
+    if (sourceTotal !== undefined && page.total !== sourceTotal) {
+      return indexError(
+        'EDS index changed during the filtered scan',
+        HTTP_STATUS.BAD_GATEWAY,
+        getJsonHeaders(tokenAuth),
+      );
+    }
+    sourceTotal = page.total;
+
+    for (const path of page.allIndexPaths ?? page.paths) {
+      if (matchesPathPrefix(path, prefix)) {
+        if (filteredTotal >= offset && paths.length < limit) paths.push(path);
+        filteredTotal += 1;
+      }
+    }
+
+    if (page.allIndexPaths || indexOffset + page.paths.length >= page.total) {
+      return { page: { paths, total: filteredTotal } };
+    }
+    return scan(indexOffset + page.paths.length);
+  }
+
+  return scan(0);
+}
 
 export async function listPages(request: Request): Promise<Response> {
   let pagination;
@@ -31,74 +153,22 @@ export async function listPages(request: Request): Promise<Response> {
     });
   }
 
-  const { offset, limit } = pagination;
+  const { offset, limit, path } = pagination;
   const { edsDomainUrl } = getCtx(request.url);
   const tokenAuth = getAuthorizationToken(request);
-  const indexUrl = new URL(getEdsUrl(edsDomainUrl, EDS_INDEX_FILENAME));
-  indexUrl.searchParams.set('offset', String(offset));
-  indexUrl.searchParams.set('limit', String(limit));
+  const result = path
+    ? await scanFilteredIndex(edsDomainUrl, tokenAuth, path, offset, limit)
+    : await fetchIndexPage(edsDomainUrl, tokenAuth, offset, limit);
+  if ('error' in result) return result.error;
 
-  let indexResponse: Response;
-  try {
-    indexResponse = await fetchEdsPage(indexUrl.toString(), tokenAuth);
-  } catch (error) {
-    return new Response(JSON.stringify({ error: `Failed to fetch EDS index: ${errorMessage(error)}` }), {
-      status: HTTP_STATUS.BAD_GATEWAY,
-      headers: getJsonHeaders(tokenAuth),
-    });
-  }
-
-  if (!indexResponse.ok) {
-    let message: string;
-    try {
-      message = indexResponse.status === HTTP_STATUS.NOT_FOUND
-        ? NOT_FOUND_ERROR
-        : await indexResponse.text();
-    } catch (error) {
-      return new Response(JSON.stringify({ error: `Failed to read EDS index: ${errorMessage(error)}` }), {
-        status: HTTP_STATUS.BAD_GATEWAY,
-        headers: getJsonHeaders(tokenAuth),
-      });
-    }
-
-    const headers = getUpstreamErrorHeaders(tokenAuth);
-
-    const xError = indexResponse.headers.get(HEADER_NAMES.X_ERROR);
-    if (xError) headers[HEADER_NAMES.X_ERROR] = xError;
-    return new Response(JSON.stringify({ error: message }), {
-      status: indexResponse.status,
-      headers,
-    });
-  }
-
-  let indexBody: unknown;
-  try {
-    indexBody = await indexResponse.json();
-  } catch (error) {
-    return new Response(JSON.stringify({ error: `Failed to read EDS index JSON: ${errorMessage(error)}` }), {
-      status: HTTP_STATUS.BAD_GATEWAY,
-      headers: getJsonHeaders(tokenAuth),
-    });
-  }
-
-  let indexPage;
-  try {
-    indexPage = parseIndexPage(indexBody, offset, limit);
-  } catch (error) {
-    if (!(error instanceof InvalidListError)) throw error;
-    return new Response(JSON.stringify({ error: `Invalid EDS index: ${errorMessage(error)}` }), {
-      status: HTTP_STATUS.BAD_GATEWAY,
-      headers: getJsonHeaders(tokenAuth),
-    });
-  }
-
-  const items = await convertListItems(edsDomainUrl, indexPage.paths, tokenAuth);
-  const nextOffset = offset + items.length < indexPage.total ? offset + items.length : null;
+  const { paths, total } = result.page;
+  const items = await convertListItems(edsDomainUrl, paths, tokenAuth);
+  const nextOffset = offset + items.length < total ? offset + items.length : null;
 
   return new Response(JSON.stringify({
     items,
     count: items.length,
-    total: indexPage.total,
+    total,
     offset,
     limit,
     nextOffset,

@@ -15,11 +15,13 @@ export class InvalidListError extends Error {}
 export type ListPagination = {
   offset: number;
   limit: number;
+  path?: string;
 };
 
 export type IndexPage = {
   paths: string[];
   total: number;
+  allIndexPaths?: string[];
 };
 
 const DEFAULT_LIMIT = 10;
@@ -55,12 +57,23 @@ function validatePath(path: unknown): path is string {
   }
 }
 
+function normalizeSitePath(path: string): string {
+  return path.startsWith('/') ? path : `/${path}`;
+}
+
+export function matchesPathPrefix(path: string, prefix: string): boolean {
+  return normalizeSitePath(path).startsWith(prefix);
+}
+
 function hasPath(value: unknown): value is { path: string } {
   return value !== null && typeof value === 'object' && 'path' in value && validatePath(value.path);
 }
 
 function cursorScope(url: string): string {
-  return new URL(url).pathname.replace(/\/$/, '');
+  const parsed = new URL(url);
+  const scope = parsed.pathname.replace(/\/$/, '');
+  const path = parsed.searchParams.get('path');
+  return path === null ? scope : `${scope}?path=${encodeURIComponent(normalizeSitePath(path))}`;
 }
 
 export function encodeCursor(offset: number, url: string): string {
@@ -96,11 +109,16 @@ function decodeCursor(cursor: string, url: string): number {
 export function parseListPagination(url: string): ListPagination {
   const params = new URL(url).searchParams;
   for (const name of params.keys()) {
-    if (!['offset', 'limit', 'cursor'].includes(name) || params.getAll(name).length !== 1) {
+    if (!['offset', 'limit', 'cursor', 'path'].includes(name) || params.getAll(name).length !== 1) {
       throw new InvalidListError(`Unexpected or repeated query parameter: ${name}`);
     }
   }
 
+  const requestedPath = params.get('path');
+  if (requestedPath !== null && !validatePath(requestedPath)) {
+    throw new InvalidListError('path must be a site-relative prefix');
+  }
+  const path = requestedPath === null ? undefined : normalizeSitePath(requestedPath);
   if (params.has('cursor') && params.has('offset')) {
     throw new InvalidListError('cursor and offset cannot be used together');
   }
@@ -112,7 +130,7 @@ export function parseListPagination(url: string): ListPagination {
     throw new InvalidListError(`limit must be between 1 and ${MAX_LIMIT}`);
   }
 
-  return { offset, limit };
+  return { offset, limit, path };
 }
 
 export function parseIndexPage(value: unknown, offset: number, limit: number): IndexPage {
@@ -123,16 +141,16 @@ export function parseIndexPage(value: unknown, offset: number, limit: number): I
   }
 
   const paths = value.data.map((entry: { path: string }) => entry.path);
+  if (paths.length === value.total && (!('offset' in value) || value.offset === 0)) {
+    return { paths: paths.slice(offset, offset + limit), total: value.total, allIndexPaths: paths };
+  }
+
   if (('offset' in value && value.offset === offset) && paths.length <= limit
     && (offset >= value.total ? paths.length === 0 : offset + paths.length <= value.total)) {
     if (paths.length === 0 && offset < value.total) {
       throw new InvalidListError('EDS index returned an empty page before its end');
     }
     return { paths, total: value.total };
-  }
-
-  if (paths.length === value.total && (!('offset' in value) || value.offset === 0)) {
-    return { paths: paths.slice(offset, offset + limit), total: value.total };
   }
 
   throw new InvalidListError('EDS index did not return the requested page or a complete dump');

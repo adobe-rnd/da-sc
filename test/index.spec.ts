@@ -331,6 +331,147 @@ describe('da-sc worker', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
+  it('filters indexed paths before pagination and hydrates only matching pages', async () => {
+    const fetchSpy = mockIndexedPages([
+      '/forms/citizens/cards/one',
+      'forms/citizens/cards/two',
+      '/forms/citizens/insights/alpha',
+      '/forms/citizens/cards-other/not-a-card',
+      '/forms/citizens/cards/three',
+    ]);
+    const prefix = 'path=%2Fforms%2Fcitizens%2Fcards%2F';
+
+    const first = await runListRequest(`?${prefix}&limit=2`);
+    const firstPage = await first.json() as { cursor: string };
+    expect(firstPage).toMatchObject({
+      items: [{ path: '/forms/citizens/cards/one' }, { path: 'forms/citizens/cards/two' }],
+      count: 2,
+      total: 3,
+      offset: 0,
+      limit: 2,
+      nextOffset: 2,
+      cursor: expect.any(String),
+    });
+    expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual([
+      'https://main--site--org.aem.page/structured-content-index.json?offset=0&limit=1000',
+      'https://main--site--org.aem.page/forms/citizens/cards/one',
+      'https://main--site--org.aem.page/forms/citizens/cards/two',
+    ]);
+
+    const second = await runListRequest(`?path=forms%2Fcitizens%2Fcards%2F&cursor=${firstPage.cursor}&limit=2`);
+    const secondPage = await second.json();
+    expect(secondPage).toMatchObject({
+      items: [{ path: '/forms/citizens/cards/three' }],
+      count: 1,
+      total: 3,
+      offset: 2,
+      limit: 2,
+      nextOffset: null,
+    });
+    expect(secondPage).not.toHaveProperty('cursor');
+    expect(fetchSpy).toHaveBeenCalledTimes(5);
+    expect(fetchSpy.mock.calls.map(([url]) => url)).not.toContain(
+      'https://main--site--org.aem.page/forms/citizens/insights/alpha',
+    );
+  });
+
+  it('returns an empty filtered page when no paths match', async () => {
+    const fetchSpy = mockIndexedPages(['/forms/citizens/cards/one', '/forms/citizens/insights/two']);
+
+    const response = await runListRequest('?path=%2Fforms%2Fcitizens%2Fbanner%2F');
+
+    expect(await response.json()).toEqual({
+      items: [], count: 0, total: 0, offset: 0, limit: 10, nextOffset: null,
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns the filtered total when offset is past the matching paths', async () => {
+    const fetchSpy = mockIndexedPages(['/cards/one', '/other/two']);
+
+    const response = await runListRequest('?path=%2Fcards%2F&offset=3&limit=2');
+
+    expect(await response.json()).toEqual({
+      items: [], count: 0, total: 1, offset: 3, limit: 2, nextOffset: null,
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('binds a filtered cursor to its path prefix', async () => {
+    const fetchSpy = mockIndexedPages(['/cards/one', '/cards/two', '/insights/one']);
+    const first = await runListRequest('?path=%2Fcards%2F&limit=1');
+    const { cursor } = await first.json() as { cursor: string };
+
+    const differentPath = await runListRequest(`?path=%2Finsights%2F&cursor=${cursor}&limit=1`);
+    const missingPath = await runListRequest(`?cursor=${cursor}&limit=1`);
+
+    expect(differentPath.status).toBe(400);
+    expect(missingPath.status).toBe(400);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('scans multiple index pages to count filtered paths', async () => {
+    const paths = Array.from({ length: 1002 }, (_, index) => (
+      index === 0 || index === 1001 ? `/cards/${index}` : `/other/${index}`
+    ));
+    const fetchSpy = mockIndexedPages(paths);
+
+    const response = await runListRequest('?path=%2Fcards%2F&limit=1');
+    const firstPage = await response.json() as { cursor: string };
+
+    expect(firstPage).toMatchObject({
+      items: [{ path: '/cards/0' }], count: 1, total: 2, nextOffset: 1, cursor: expect.any(String),
+    });
+    expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual([
+      'https://main--site--org.aem.page/structured-content-index.json?offset=0&limit=1000',
+      'https://main--site--org.aem.page/structured-content-index.json?offset=1000&limit=1000',
+      'https://main--site--org.aem.page/cards/0',
+    ]);
+
+    const next = await runListRequest(`?path=%2Fcards%2F&cursor=${firstPage.cursor}&limit=1`);
+
+    expect(await next.json()).toMatchObject({
+      items: [{ path: '/cards/1001' }], count: 1, total: 2, offset: 1, nextOffset: null,
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(6);
+  });
+
+  it('scans a complete static index dump only once', async () => {
+    const data = Array.from({ length: 1001 }, (_, index) => ({
+      path: index === 1000 ? '/cards/last' : `/other/${index}`,
+    }));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => (
+      String(url).includes('structured-content-index.json')
+        ? new Response(JSON.stringify({ total: data.length, data }))
+        : new Response(MOCK_EDS_HTML)
+    ));
+
+    const response = await runListRequest('?path=%2Fcards%2F&limit=1');
+
+    expect(await response.json()).toMatchObject({
+      items: [{ path: '/cards/last' }], count: 1, total: 1, nextOffset: null,
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects a filtered scan if the index total changes between pages', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      const requestedOffset = Number(new URL(String(url)).searchParams.get('offset'));
+      const paths = Array.from({ length: requestedOffset ? 2 : 1000 }, (_, index) => ({
+        path: `/cards/${requestedOffset + index}`,
+      }));
+      return new Response(JSON.stringify({
+        total: requestedOffset ? 1002 : 1001, offset: requestedOffset, data: paths,
+      }));
+    });
+
+    const response = await runListRequest('?path=%2Fcards%2F&limit=1');
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: 'EDS index changed during the filtered scan' });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
   it('defaults to 10 items and stops at the end of the EDS index', async () => {
     const fetchSpy = mockIndexedPages(Array.from({ length: 12 }, (_, index) => `/page-${index}`));
 
@@ -486,6 +627,24 @@ describe('da-sc worker', () => {
       expect(fetchSpy).not.toHaveBeenCalled();
     },
   );
+
+  it.each([
+    '?path=',
+    '?path=https%3A%2F%2Fexample.com%2Fcards',
+    '?path=%2F%2Fexample.com%2Fcards',
+    '?path=..%2Fcards',
+    '?path=%252e%252e%2Fcards',
+    '?path=%2Fcards%3Fdraft%3Dtrue',
+    '?path=%2Fcards%2F&path=%2Finsights%2F',
+  ])('rejects invalid path filter in %s', async (query) => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    const response = await runListRequest(query);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: expect.any(String) });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 
   it.each([
     ['full URL', 'https://example.com/page'],
