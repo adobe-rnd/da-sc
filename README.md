@@ -4,16 +4,9 @@ A Cloudflare Worker that fetches Edge Delivery Services (EDS) HTML and converts 
 
 The conversion is handled by `@adobe/da-sc-sdk` (`convertHtmlToJson`), while this service focuses on request routing and EDS fetching.
 
-## Request format
+## API reference
 
-```
-/{tier}/{org}/{site}/{path}
-```
-
-- `tier`: `preview`, `review` or `live`
-- `org`: organization name
-- `site`: site name
-- `path`: content path on the EDS domain
+See the [API reference](docs/api.md) for parameters, response shapes, errors, and examples.
 
 ## Commands
 
