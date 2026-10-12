@@ -91,7 +91,10 @@ describe('da-sc worker', () => {
     expect(response.status).toBe(500);
     expect(await response.text()).toBe('Failed to convert EDS HTML: schema mismatch');
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
-    expect(mockedConvertHtmlToJson).toHaveBeenCalledWith({ html: '<main>stub</main>' });
+    expect(mockedConvertHtmlToJson).toHaveBeenCalledWith({
+      html: '<main>stub</main>',
+      media: { origin: 'https://main--site--org.aem.page' },
+    });
   });
 
   it('returns converted JSON for successful GET request', async () => {
@@ -107,7 +110,10 @@ describe('da-sc worker', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Type')).toContain('application/json');
     expect(await response.json()).toEqual(converted);
-    expect(mockedConvertHtmlToJson).toHaveBeenCalledWith({ html: '<main>stub</main>' });
+    expect(mockedConvertHtmlToJson).toHaveBeenCalledWith({
+      html: '<main>stub</main>',
+      media: { origin: 'https://main--site--org.aem.page' },
+    });
   });
 
   it('returns 500 when context parsing throws an Error', async () => {

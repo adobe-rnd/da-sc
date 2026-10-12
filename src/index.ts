@@ -78,7 +78,7 @@ export default {
       }
 
       const html = await edsResp.text();
-      const conversion = convertHtmlToJson({ html });
+      const conversion = convertHtmlToJson({ html, media: { origin: ctx.edsDomainUrl } });
       if ('error' in conversion) {
         return new Response(`Failed to convert EDS HTML: ${conversion.error}`, {
           status: 500,
