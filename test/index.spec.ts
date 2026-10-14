@@ -93,7 +93,21 @@ describe('da-sc worker', () => {
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
     expect(mockedConvertHtmlToJson).toHaveBeenCalledWith({
       html: '<main>stub</main>',
-      media: { origin: 'https://main--site--org.aem.page' },
+      media: { base: 'https://main--site--org.aem.page/path' },
+    });
+  });
+
+  it('resolves media against the page URL EDS redirected to', async () => {
+    const redirected = new Response('<main>stub</main>', { status: 200 });
+    Object.defineProperty(redirected, 'url', { value: 'https://main--site--org.aem.page/path/' });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(redirected);
+    mockedConvertHtmlToJson.mockReturnValue({ json: { metadata: { schemaName: 'article' }, data: {} } });
+
+    await runRequest('http://example.com/preview/org/site/path');
+
+    expect(mockedConvertHtmlToJson).toHaveBeenCalledWith({
+      html: '<main>stub</main>',
+      media: { base: 'https://main--site--org.aem.page/path/' },
     });
   });
 
@@ -112,7 +126,7 @@ describe('da-sc worker', () => {
     expect(await response.json()).toEqual(converted);
     expect(mockedConvertHtmlToJson).toHaveBeenCalledWith({
       html: '<main>stub</main>',
-      media: { origin: 'https://main--site--org.aem.page' },
+      media: { base: 'https://main--site--org.aem.page/path' },
     });
   });
 
