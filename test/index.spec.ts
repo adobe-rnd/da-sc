@@ -93,7 +93,7 @@ describe('da-sc worker', () => {
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
     expect(mockedConvertHtmlToJson).toHaveBeenCalledWith({
       html: '<main>stub</main>',
-      media: { base: 'https://main--site--org.aem.page/path' },
+      asset: { base: 'https://main--site--org.aem.page/path' },
     });
   });
 
@@ -107,7 +107,7 @@ describe('da-sc worker', () => {
 
     expect(mockedConvertHtmlToJson).toHaveBeenCalledWith({
       html: '<main>stub</main>',
-      media: { base: 'https://main--site--org.aem.page/path/' },
+      asset: { base: 'https://main--site--org.aem.page/path/' },
     });
   });
 
@@ -126,7 +126,7 @@ describe('da-sc worker', () => {
     expect(await response.json()).toEqual(converted);
     expect(mockedConvertHtmlToJson).toHaveBeenCalledWith({
       html: '<main>stub</main>',
-      media: { base: 'https://main--site--org.aem.page/path' },
+      asset: { base: 'https://main--site--org.aem.page/path' },
     });
   });
 

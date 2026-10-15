@@ -79,7 +79,7 @@ export default {
 
       const html = await edsResp.text();
       // Media bus images resolve against the page URL, after any redirect, like in a browser.
-      const conversion = convertHtmlToJson({ html, media: { base: edsResp.url || edsContentUrl } });
+      const conversion = convertHtmlToJson({ html, asset: { base: edsResp.url || edsContentUrl } });
       if ('error' in conversion) {
         return new Response(`Failed to convert EDS HTML: ${conversion.error}`, {
           status: 500,
