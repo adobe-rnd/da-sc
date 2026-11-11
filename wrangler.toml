@@ -7,6 +7,9 @@ workers_dev = true
 [vars]
 VERSION = "@@VERSION@@-dev"
 ENVIRONMENT = "dev"
+# JSON Schemas: no caching on workers.dev. Source, token and canonical origin are
+# set locally in .dev.vars (see README.md).
+JSON_SCHEMA_CACHE_MODE = "bypass"
 
 # CI environment
 [env.ci]
@@ -14,6 +17,7 @@ name = "da-sc-ci"
 [env.ci.vars]
 VERSION = "@@VERSION@@-ci"
 ENVIRONMENT = "ci"
+JSON_SCHEMA_CACHE_MODE = "bypass"
 
 # Production environment
 [env.production]

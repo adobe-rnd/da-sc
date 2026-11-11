@@ -46,3 +46,12 @@ web_modules/
 
 # Optional stylelint cache
 .stylelintcache
+
+# Scout
+.scout/
+
+# Distribution files
+dist/
+
+# Local Worker secrets
+.dev.vars*

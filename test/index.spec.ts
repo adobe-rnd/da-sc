@@ -12,6 +12,7 @@
 import {
   afterEach, beforeEach, describe, expect, it, vi,
 } from 'vitest';
+import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test';
 import worker from '../src';
 
 const mockedConvertHtmlToJson = vi.hoisted(() => vi.fn());
@@ -24,7 +25,10 @@ const MOCK_EDS_HTML = '<main>stub</main>';
 
 async function runRequest(url: string, init?: RequestInit): Promise<Response> {
   const request = new Request(url, init);
-  return worker.fetch(request);
+  const executionCtx = createExecutionContext();
+  const response = await worker.fetch(request, env, executionCtx);
+  await waitOnExecutionContext(executionCtx);
+  return response;
 }
 
 describe('da-sc worker', () => {
@@ -237,5 +241,31 @@ describe('da-sc worker', () => {
         headers: { Authorization: 'token secret-value' },
       }),
     );
+  });
+
+  describe('/schemas namespace dispatch', () => {
+    it.each([
+      ['/schemas', 404],
+      ['/schemas/', 404],
+      ['/schemas/anything', 404],
+      // Valid path; the test environment has no GITHUB_TOKEN.
+      ['/schemas/shared/demo-card/v1.0.0.json', 503],
+    ])('returns the schema handler response for %s without calling EDS', async (path, status) => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      for (const method of ['GET', 'OPTIONS', 'POST']) {
+        // eslint-disable-next-line no-await-in-loop
+        const response = await runRequest(`http://example.com${path}`, { method });
+        expect(response.status).toBe(status);
+      }
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(mockedConvertHtmlToJson).not.toHaveBeenCalled();
+    });
+
+    it('does not reserve /schemas-other', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(MOCK_EDS_HTML));
+      const response = await runRequest('http://example.com/schemas-other/site/path');
+      expect(response.status).toBe(200);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
   });
 });
