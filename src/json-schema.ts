@@ -173,9 +173,52 @@ async function fetchSchema(schemaPath: string, config: JsonSchemaConfig): Promis
   }
 }
 
+/**
+ * Internal cache key: request origin, a namespace derived from the effective
+ * source and canonical origin, and the validated path. Never includes the
+ * incoming query string or credentials.
+ */
+async function edgeCacheKey(
+  request: Request,
+  schemaPath: string,
+  config: JsonSchemaConfig,
+): Promise<Request> {
+  const source = JSON.stringify([config.contentsUrl, config.ref, config.canonicalOrigin]);
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(source));
+  const namespace = [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+  return new Request(`${new URL(request.url).origin}/${namespace}/${schemaPath}`, { method: 'GET' });
+}
+
+async function fetchSchemaWithEdgeCache(
+  request: Request,
+  schemaPath: string,
+  config: JsonSchemaConfig,
+  executionCtx: ExecutionContext,
+): Promise<Response> {
+  const cache = caches.default;
+  const key = await edgeCacheKey(request, schemaPath, config);
+  try {
+    const cached = await cache.match(key);
+    if (cached) {
+      return new Response(cached.body, cached);
+    }
+  } catch {
+    // Treat cache failures as a miss.
+  }
+
+  const response = await fetchSchema(schemaPath, config);
+  if (response.status === 200 || response.status === 404) {
+    executionCtx.waitUntil(cache.put(key, response.clone()).catch(() => undefined));
+  }
+  return response;
+}
+
 async function respond(
   request: Request,
   env: JsonSchemaEnv,
+  executionCtx: ExecutionContext,
   allowlist: JsonSchemaAllowlist,
 ): Promise<Response> {
   const schemaPath = parseSchemaPath(new URL(request.url).pathname);
@@ -211,16 +254,19 @@ async function respond(
     });
   }
 
-  return fetchSchema(schemaPath, config);
+  if (config.cacheMode === 'bypass' || request.headers.has('Authorization')) {
+    return fetchSchema(schemaPath, config);
+  }
+  return fetchSchemaWithEdgeCache(request, schemaPath, config, executionCtx);
 }
 
 export async function handleJsonSchemaRequest(
   request: Request,
   env: JsonSchemaEnv,
-  _executionCtx: ExecutionContext,
+  executionCtx: ExecutionContext,
   allowlist: JsonSchemaAllowlist = JSON_SCHEMA_ALLOWLIST,
 ): Promise<Response> {
-  const response = await respond(request, env, allowlist);
+  const response = await respond(request, env, executionCtx, allowlist);
   if (request.headers.has('Authorization')) {
     response.headers.set('Cache-Control', 'private, no-store');
   }

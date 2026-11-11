@@ -400,4 +400,167 @@ describe('handleJsonSchemaRequest', () => {
       expect(timeoutSpy).toHaveBeenCalledWith(10_000);
     });
   });
+
+  describe('edge cache', () => {
+    function schemaFor(origin: string): string {
+      return JSON.stringify({ $id: `${origin}${LISTED}`, type: 'object' });
+    }
+
+    it('serves a repeated GET from the edge cache with the stored headers', async () => {
+      const first = await run(LISTED);
+      const second = await run(`${LISTED}?ignored=1`);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(second.status).toBe(200);
+      expect(await second.text()).toBe(await first.text());
+      expect(second.headers.get('Content-Type')).toBe('application/schema+json');
+      expect(second.headers.get('Cache-Control')).toBe('public, max-age=31536000, immutable');
+      expectBaseHeaders(second);
+    });
+
+    it('caches a GitHub 404 with max-age=60, never immutable', async () => {
+      fetchMock.mockImplementation(async () => githubResponse(null, { status: 404 }));
+      await run(LISTED);
+      const second = await run(LISTED);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(second.status).toBe(404);
+      expect(second.headers.get('Cache-Control')).toBe('public, max-age=60');
+      expectBaseHeaders(second);
+    });
+
+    it.each([
+      ['GitHub 500', () => githubResponse(null, { status: 500 })],
+      ['invalid body', () => githubResponse('{"$id":"https://wrong.example/x"}')],
+    ])('does not cache a 503 from %s', async (_name, upstream) => {
+      fetchMock.mockImplementation(async () => upstream());
+      await run(LISTED);
+      await run(LISTED);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('neither reads nor writes the cache in bypass mode', async () => {
+      await run(LISTED);
+      const matchSpy = vi.spyOn(caches.default, 'match');
+      const putSpy = vi.spyOn(caches.default, 'put');
+      const env = { ...TEST_ENV, JSON_SCHEMA_CACHE_MODE: 'bypass' };
+      await run(LISTED, {}, env);
+      fetchMock.mockImplementation(async () => githubResponse(null, { status: 404 }));
+      await run(LISTED, {}, env);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(matchSpy).not.toHaveBeenCalled();
+      expect(putSpy).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['token x'],
+      ['Bearer anything'],
+      ['arbitrary'],
+      [''],
+    ])('neither reads nor writes the cache with Authorization %j', async (authorization) => {
+      await run(LISTED);
+      const matchSpy = vi.spyOn(caches.default, 'match');
+      const putSpy = vi.spyOn(caches.default, 'put');
+      const auth = { headers: { Authorization: authorization } };
+      const response = await run(LISTED, auth);
+      fetchMock.mockImplementation(async () => githubResponse(null, { status: 404 }));
+      await run(LISTED, auth);
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(matchSpy).not.toHaveBeenCalled();
+      expect(putSpy).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['ref', { JSON_SCHEMA_GITHUB_REF: 'other-ref' }],
+      ['contents URL', { JSON_SCHEMA_GITHUB_CONTENTS_URL: 'https://api.github.com/repos/test-owner/other-repo/contents' }],
+    ])('keeps separate entries per %s', async (_name, override) => {
+      await run(LISTED);
+      await run(LISTED, {}, { ...TEST_ENV, ...override });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps separate entries per canonical origin', async () => {
+      const other = 'https://other.example';
+      await run(LISTED);
+      fetchMock.mockImplementation(async () => githubResponse(schemaFor(other)));
+      const response = await run(LISTED, {}, { ...TEST_ENV, JSON_SCHEMA_CANONICAL_ORIGIN: other });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(response.status).toBe(200);
+      expect(JSON.parse(await response.text()).$id).toBe(`${other}${LISTED}`);
+    });
+
+    it('validates configuration before a cache hit', async () => {
+      await run(LISTED);
+      const response = await run(LISTED, {}, { ...TEST_ENV, GITHUB_TOKEN: undefined });
+      expect(response.status).toBe(503);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+    });
+
+    it('checks the allowlist before a cache hit', async () => {
+      await run(LISTED);
+      const response = await run(LISTED, {}, TEST_ENV, []);
+      expect(response.status).toBe(404);
+    });
+
+    it('does not use the cache for preflight or 405', async () => {
+      const matchSpy = vi.spyOn(caches.default, 'match');
+      const putSpy = vi.spyOn(caches.default, 'put');
+      await run(LISTED, { method: 'OPTIONS' });
+      await run(LISTED, { method: 'POST' });
+      expect(matchSpy).not.toHaveBeenCalled();
+      expect(putSpy).not.toHaveBeenCalled();
+    });
+
+    it('excludes query strings and the request path from the cache key', async () => {
+      const putSpy = vi.spyOn(caches.default, 'put');
+      await run(`${LISTED}?a=1`);
+      const [key] = putSpy.mock.calls[0];
+      const url = new URL(key instanceof Request ? key.url : String(key));
+      expect(url.origin).toBe('https://schemas.test');
+      expect(url.search).toBe('');
+      expect(url.pathname).toMatch(/^\/[0-9a-f]{64}\/schemas\/shared\/demo-card\/v1\.0\.0\.json$/);
+    });
+
+    it('still serves the response when the cache write fails', async () => {
+      vi.spyOn(caches.default, 'put').mockRejectedValue(new Error('cache down'));
+      const response = await run(LISTED);
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe(SCHEMA_BODY);
+    });
+
+    it('returns the response before the background cache write completes', async () => {
+      let resolvePut: () => void = () => {};
+      const pendingPut = new Promise<void>((resolve) => {
+        resolvePut = resolve;
+      });
+      const putSpy = vi.spyOn(caches.default, 'put').mockReturnValue(pendingPut);
+      const executionCtx = createExecutionContext();
+      let putSettled = false;
+      pendingPut.then(() => {
+        putSettled = true;
+      }, () => undefined);
+
+      const response = await handleJsonSchemaRequest(
+        new Request(`https://schemas.test${LISTED}`),
+        TEST_ENV,
+        executionCtx,
+        TEST_ALLOWLIST,
+      );
+
+      expect(putSpy).toHaveBeenCalledTimes(1);
+      expect(putSettled).toBe(false);
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe(SCHEMA_BODY);
+
+      resolvePut();
+      await waitOnExecutionContext(executionCtx);
+      expect(putSettled).toBe(true);
+    });
+
+    it('treats a failing cache read as a miss', async () => {
+      vi.spyOn(caches.default, 'match').mockRejectedValue(new Error('cache down'));
+      const response = await run(LISTED);
+      expect(response.status).toBe(200);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+  });
 });
