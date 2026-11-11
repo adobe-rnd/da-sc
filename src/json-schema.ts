@@ -35,9 +35,12 @@ const DEFAULT_CACHE_MODE: JsonSchemaCacheMode = 'immutable';
 // Placeholder until the production hostname is known; replacing it is a cutover step.
 const DEFAULT_CANONICAL_ORIGIN = 'https://schemas.example.invalid';
 const MAX_NAME_LENGTH = 64;
+const GITHUB_TIMEOUT_MS = 10_000;
+const IMMUTABLE_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+const NEGATIVE_CACHE_CONTROL = 'public, max-age=60';
 
 const SCHEMA_PATH = /^\/schemas\/shared\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.json$/;
-const CONTENTS_URL = /^https:\/\/api\.github\.com\/repos\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+\/contents$/;
+const CONTENTS_URL = /^https:\/\/api\.github\.com\/repos\/[A-Za-z0-9-]+\/(?!\.+\/)[A-Za-z0-9._-]+\/contents$/;
 const REF = /^[A-Za-z0-9._/-]+$/;
 
 const BASE_HEADERS: Record<string, string> = {
@@ -116,6 +119,60 @@ function serviceUnavailable(): Response {
   return textResponse(503, 'Service Unavailable', { 'Cache-Control': 'no-store' });
 }
 
+function isSchemaObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Returns true if the body is a JSON object whose `$id` equals the canonical URL. */
+function isValidSchemaBody(body: string, canonicalUrl: string): boolean {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return false;
+  }
+  return isSchemaObject(parsed) && parsed.$id === canonicalUrl;
+}
+
+async function fetchSchema(schemaPath: string, config: JsonSchemaConfig): Promise<Response> {
+  const upstreamUrl = `${config.contentsUrl}/${schemaPath}?ref=${encodeURIComponent(config.ref)}`;
+  const bypass = config.cacheMode === 'bypass';
+  try {
+    const upstream = await fetch(upstreamUrl, {
+      headers: {
+        Accept: 'application/vnd.github.raw',
+        Authorization: `Bearer ${config.token}`,
+        'User-Agent': 'da-sc',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS),
+    });
+    if (upstream.status === 404) {
+      await upstream.body?.cancel();
+      return notFound(bypass ? 'no-store' : NEGATIVE_CACHE_CONTROL);
+    }
+    if (upstream.status !== 200) {
+      await upstream.body?.cancel();
+      return serviceUnavailable();
+    }
+    const body = await upstream.text();
+    if (!isValidSchemaBody(body, `${config.canonicalOrigin}/${schemaPath}`)) {
+      return serviceUnavailable();
+    }
+    return new Response(body, {
+      status: 200,
+      headers: {
+        ...BASE_HEADERS,
+        'Content-Type': 'application/schema+json',
+        'Cache-Control': bypass ? 'no-store' : IMMUTABLE_CACHE_CONTROL,
+      },
+    });
+  } catch {
+    return serviceUnavailable();
+  }
+}
+
 async function respond(
   request: Request,
   env: JsonSchemaEnv,
@@ -132,7 +189,7 @@ async function respond(
   }
 
   if (!allowlist.includes(schemaPath)) {
-    return notFound(config.cacheMode === 'bypass' ? 'no-store' : 'public, max-age=60');
+    return notFound(config.cacheMode === 'bypass' ? 'no-store' : NEGATIVE_CACHE_CONTROL);
   }
 
   if (request.method === 'OPTIONS') {
@@ -154,8 +211,7 @@ async function respond(
     });
   }
 
-  // Fetching from GitHub is not implemented yet.
-  return serviceUnavailable();
+  return fetchSchema(schemaPath, config);
 }
 
 export async function handleJsonSchemaRequest(

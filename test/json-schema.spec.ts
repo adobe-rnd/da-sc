@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 import {
-  afterEach, describe, expect, it, vi,
+  afterEach, beforeEach, describe, expect, it, vi, type MockInstance,
 } from 'vitest';
 import { createExecutionContext, waitOnExecutionContext } from 'cloudflare:test';
 import { handleJsonSchemaRequest, parseSchemaPath } from '../src/json-schema';
@@ -23,7 +23,18 @@ const TEST_ENV = {
   JSON_SCHEMA_GITHUB_CONTENTS_URL: 'https://api.github.com/repos/test-owner/test-repo/contents',
   JSON_SCHEMA_GITHUB_REF: 'test-ref',
   GITHUB_TOKEN: 'test-token',
+  JSON_SCHEMA_CANONICAL_ORIGIN: 'https://schemas.example.com',
 };
+
+const SCHEMA_BODY = `{
+  "$id": "https://schemas.example.com${LISTED}",
+  "type": "object"
+}
+`;
+
+function githubResponse(body: BodyInit | null, init?: ResponseInit): Response {
+  return new Response(body, init);
+}
 
 const TEST_ALLOWLIST: JsonSchemaAllowlist = [LISTED.slice(1)];
 
@@ -105,6 +116,12 @@ describe('JSON_SCHEMA_ALLOWLIST', () => {
 });
 
 describe('handleJsonSchemaRequest', () => {
+  let fetchMock: MockInstance<typeof fetch>;
+
+  beforeEach(() => {
+    fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => githubResponse(SCHEMA_BODY));
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -127,6 +144,9 @@ describe('handleJsonSchemaRequest', () => {
   it.each([
     [{ ...TEST_ENV, JSON_SCHEMA_GITHUB_CONTENTS_URL: 'https://example.com/repos/a/b/contents' }],
     [{ ...TEST_ENV, JSON_SCHEMA_GITHUB_CONTENTS_URL: '' }],
+    [{ ...TEST_ENV, JSON_SCHEMA_GITHUB_CONTENTS_URL: 'https://api.github.com/repos/example/./contents' }],
+    [{ ...TEST_ENV, JSON_SCHEMA_GITHUB_CONTENTS_URL: 'https://api.github.com/repos/example/../contents' }],
+    [{ ...TEST_ENV, JSON_SCHEMA_GITHUB_CONTENTS_URL: 'https://api.github.com/repos/example/.../contents' }],
     [{ ...TEST_ENV, JSON_SCHEMA_GITHUB_REF: '' }],
     [{ ...TEST_ENV, JSON_SCHEMA_GITHUB_REF: 'a b' }],
     [{ ...TEST_ENV, GITHUB_TOKEN: undefined }],
@@ -141,13 +161,7 @@ describe('handleJsonSchemaRequest', () => {
     [{ ...TEST_ENV, JSON_SCHEMA_CANONICAL_ORIGIN: 'ftp://schemas.example.com' }],
   ])('returns uncached 503 for invalid configuration %o', async (env) => {
     const response = await run(LISTED, {}, env);
-    expect(response.status).toBe(503);
-    expect(response.headers.get('Cache-Control')).toBe('no-store');
-    expectBaseHeaders(response);
-  });
-
-  it('returns uncached 503 for GET on listed paths until GitHub fetching exists', async () => {
-    const response = await run(LISTED);
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(response.status).toBe(503);
     expect(response.headers.get('Cache-Control')).toBe('no-store');
     expectBaseHeaders(response);
@@ -165,6 +179,8 @@ describe('handleJsonSchemaRequest', () => {
   });
 
   it.each([
+    [{ ...TEST_ENV, JSON_SCHEMA_GITHUB_CONTENTS_URL: 'https://api.github.com/repos/example/.github/contents' }],
+    [{ ...TEST_ENV, JSON_SCHEMA_GITHUB_CONTENTS_URL: 'https://api.github.com/repos/example/a.b/contents' }],
     [{ ...TEST_ENV, JSON_SCHEMA_CACHE_MODE: 'immutable' }],
     [{ ...TEST_ENV, JSON_SCHEMA_CACHE_MODE: 'bypass' }],
     [{ ...TEST_ENV, JSON_SCHEMA_CANONICAL_ORIGIN: 'https://schemas.example.com' }],
@@ -178,7 +194,7 @@ describe('handleJsonSchemaRequest', () => {
     ['malformed 404', '/schemas/nope', 'GET', 404],
     ['unlisted 404', UNLISTED, 'GET', 404],
     ['405', LISTED, 'POST', 405],
-    ['listed GET 503', LISTED, 'GET', 503],
+    ['listed GET 200', LISTED, 'GET', 200],
   ])('returns no-store for %s in bypass cache mode', async (_name, path, method, status) => {
     const env = { ...TEST_ENV, JSON_SCHEMA_CACHE_MODE: 'bypass' };
     const response = await run(path, { method }, env);
@@ -194,7 +210,6 @@ describe('handleJsonSchemaRequest', () => {
   });
 
   it('returns 404 for unlisted paths for every method, cacheable by clients for 60 s', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
     for (const method of ['GET', 'OPTIONS', 'POST', 'DELETE']) {
       // eslint-disable-next-line no-await-in-loop
       const response = await run(UNLISTED, { method });
@@ -203,7 +218,7 @@ describe('handleJsonSchemaRequest', () => {
       expect(response.headers.has('Allow')).toBe(false);
       expectBaseHeaders(response);
     }
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -211,7 +226,7 @@ describe('handleJsonSchemaRequest', () => {
     ['configuration 503', LISTED, 'GET', { JSON_SCHEMA_GITHUB_REF: '' }, 503],
     ['unlisted 404', UNLISTED, 'GET', TEST_ENV, 404],
     ['405', LISTED, 'POST', TEST_ENV, 405],
-    ['listed GET 503', LISTED, 'GET', TEST_ENV, 503],
+    ['listed GET 200', LISTED, 'GET', TEST_ENV, 200],
   ])('returns private, no-store for %s when Authorization is present', async (_name, path, method, env, status) => {
     const response = await run(path, { method, headers: { Authorization: 'token x' } }, env);
     expect(response.status).toBe(status);
@@ -255,5 +270,134 @@ describe('handleJsonSchemaRequest', () => {
   it('ignores query parameters when matching the allowlist', async () => {
     const response = await run(`${LISTED}?ref=evil&path=x`, { method: 'OPTIONS' });
     expect(response.status).toBe(204);
+  });
+
+  describe('GitHub fetch', () => {
+    it('serves the upstream bytes unchanged with immutable caching', async () => {
+      const response = await run(LISTED);
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe(SCHEMA_BODY);
+      expect(response.headers.get('Content-Type')).toBe('application/schema+json');
+      expect(response.headers.get('Cache-Control')).toBe('public, max-age=31536000, immutable');
+      expectBaseHeaders(response);
+    });
+
+    it('builds the upstream request only from configuration and the validated path', async () => {
+      await run(`${LISTED}?ref=evil&path=x`, {
+        headers: { Authorization: 'token client', Cookie: 'a=b' },
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe(
+        'https://api.github.com/repos/test-owner/test-repo/contents/schemas/shared/demo-card/v1.0.0.json?ref=test-ref',
+      );
+      const headers = new Headers(init?.headers);
+      expect(headers.get('Authorization')).toBe('Bearer test-token');
+      expect(headers.get('Accept')).toBe('application/vnd.github.raw');
+      expect(headers.get('User-Agent')).toBe('da-sc');
+      expect(headers.has('Cookie')).toBe(false);
+      expect(init?.redirect).toBe('manual');
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('uses the production defaults for the upstream URL', async () => {
+      await run(LISTED, {}, { GITHUB_TOKEN: 't' });
+      expect(fetchMock.mock.calls[0][0]).toBe(
+        'https://api.github.com/repos/adobe/da-sc-sdk/contents/schemas/shared/demo-card/v1.0.0.json?ref=main',
+      );
+    });
+
+    it('encodes the configured ref', async () => {
+      await run(LISTED, {}, { ...TEST_ENV, JSON_SCHEMA_GITHUB_REF: 'feature/x' });
+      expect(fetchMock.mock.calls[0][0]).toMatch(/\?ref=feature%2Fx$/);
+    });
+
+    it('returns no-store for success in bypass mode', async () => {
+      const response = await run(LISTED, {}, { ...TEST_ENV, JSON_SCHEMA_CACHE_MODE: 'bypass' });
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+    });
+
+    it('returns private, no-store for success when Authorization is present', async () => {
+      const response = await run(LISTED, { headers: { Authorization: 'token x' } });
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    });
+
+    it('maps a GitHub 404 to a 404 cacheable for 60 s, never immutable', async () => {
+      fetchMock.mockResolvedValue(githubResponse('{"message":"Not Found"}', { status: 404 }));
+      const response = await run(LISTED);
+      expect(response.status).toBe(404);
+      expect(response.headers.get('Cache-Control')).toBe('public, max-age=60');
+      expect(await response.text()).toBe('Not Found');
+      expectBaseHeaders(response);
+    });
+
+    it('maps a GitHub 404 to no-store in bypass mode', async () => {
+      fetchMock.mockResolvedValue(githubResponse(null, { status: 404 }));
+      const response = await run(LISTED, {}, { ...TEST_ENV, JSON_SCHEMA_CACHE_MODE: 'bypass' });
+      expect(response.status).toBe(404);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+    });
+
+    it.each([
+      ['401', () => githubResponse('{"message":"Bad credentials"}', { status: 401 })],
+      ['403', () => githubResponse('{"message":"rate limit"}', { status: 403 })],
+      ['429', () => githubResponse(null, { status: 429 })],
+      ['500', () => githubResponse(null, { status: 500 })],
+      ['204', () => githubResponse(null, { status: 204 })],
+      ['302 redirect', () => githubResponse(null, { status: 302, headers: { Location: 'https://evil.example/' } })],
+      ['invalid JSON', () => githubResponse('{not json')],
+      ['HTML', () => githubResponse('<html></html>')],
+      ['boolean schema', () => githubResponse('true')],
+      ['array', () => githubResponse('[]')],
+      ['null', () => githubResponse('null')],
+      ['missing $id', () => githubResponse('{"type":"object"}')],
+      ['wrong $id', () => githubResponse('{"$id":"https://other.example/schemas/shared/demo-card/v1.0.0.json"}')],
+      ['$id from the request host', () => githubResponse(`{"$id":"https://schemas.test${LISTED}"}`)],
+    ])('returns a sanitized uncached 503 for upstream %s', async (_name, upstream) => {
+      fetchMock.mockResolvedValue(upstream());
+      const response = await run(LISTED);
+      expect(response.status).toBe(503);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+      expect(response.headers.has('Location')).toBe(false);
+      expect(await response.text()).toBe('Service Unavailable');
+      expectBaseHeaders(response);
+    });
+
+    it.each([
+      ['network error', new TypeError('Network connection lost')],
+      ['timeout', new DOMException('The operation timed out.', 'TimeoutError')],
+    ])('returns a sanitized uncached 503 for %s', async (_name, error) => {
+      fetchMock.mockRejectedValue(error);
+      const response = await run(LISTED);
+      expect(response.status).toBe(503);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+      expect(await response.text()).toBe('Service Unavailable');
+    });
+
+    it('returns 503 when the body read fails, e.g. after the timeout', async () => {
+      const body = new ReadableStream({
+        pull(controller) {
+          controller.error(new DOMException('The operation timed out.', 'TimeoutError'));
+        },
+      });
+      fetchMock.mockResolvedValue(githubResponse(body));
+      const response = await run(LISTED);
+      expect(response.status).toBe(503);
+    });
+
+    it('validates $id against the canonical origin, not the request host', async () => {
+      const env = { ...TEST_ENV, JSON_SCHEMA_CANONICAL_ORIGIN: 'http://localhost:8787' };
+      fetchMock.mockResolvedValue(githubResponse(`{"$id":"http://localhost:8787${LISTED}"}`));
+      const response = await run(LISTED, {}, env);
+      expect(response.status).toBe(200);
+    });
+
+    it('applies the 10 second timeout', async () => {
+      const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+      await run(LISTED);
+      expect(timeoutSpy).toHaveBeenCalledWith(10_000);
+    });
   });
 });
