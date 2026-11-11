@@ -46,3 +46,9 @@ web_modules/
 
 # Optional stylelint cache
 .stylelintcache
+
+# Scout
+.scout/
+
+# Distribution files
+dist/
