@@ -22,6 +22,7 @@ const UNLISTED = '/schemas/shared/demo-card/v9.9.9.json';
 const TEST_ENV = {
   JSON_SCHEMA_GITHUB_CONTENTS_URL: 'https://api.github.com/repos/test-owner/test-repo/contents',
   JSON_SCHEMA_GITHUB_REF: 'test-ref',
+  GITHUB_TOKEN: 'test-token',
 };
 
 const TEST_ALLOWLIST: JsonSchemaAllowlist = [LISTED.slice(1)];
@@ -29,7 +30,7 @@ const TEST_ALLOWLIST: JsonSchemaAllowlist = [LISTED.slice(1)];
 async function run(
   path: string,
   init?: RequestInit,
-  env: Record<string, string> = TEST_ENV,
+  env: Record<string, string | undefined> = TEST_ENV,
   allowlist: JsonSchemaAllowlist = TEST_ALLOWLIST,
 ): Promise<Response> {
   const executionCtx = createExecutionContext();
@@ -108,12 +109,12 @@ describe('handleJsonSchemaRequest', () => {
     vi.restoreAllMocks();
   });
 
-  it('returns 404 without caching for malformed paths, for every method', async () => {
+  it('returns no-store 404 for malformed paths, for every method', async () => {
     for (const method of ['GET', 'OPTIONS', 'POST']) {
       // eslint-disable-next-line no-await-in-loop
       const response = await run('/schemas/shared/Image/v1.0.0.json', { method });
       expect(response.status).toBe(404);
-      expect(response.headers.has('Cache-Control')).toBe(false);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
       expectBaseHeaders(response);
     }
   });
@@ -124,10 +125,21 @@ describe('handleJsonSchemaRequest', () => {
   });
 
   it.each([
-    [{ JSON_SCHEMA_GITHUB_CONTENTS_URL: 'https://example.com/repos/a/b/contents' }],
-    [{ JSON_SCHEMA_GITHUB_CONTENTS_URL: '' }],
+    [{ ...TEST_ENV, JSON_SCHEMA_GITHUB_CONTENTS_URL: 'https://example.com/repos/a/b/contents' }],
+    [{ ...TEST_ENV, JSON_SCHEMA_GITHUB_CONTENTS_URL: '' }],
     [{ ...TEST_ENV, JSON_SCHEMA_GITHUB_REF: '' }],
-  ])('returns uncached 503 for invalid source configuration %o', async (env) => {
+    [{ ...TEST_ENV, JSON_SCHEMA_GITHUB_REF: 'a b' }],
+    [{ ...TEST_ENV, GITHUB_TOKEN: undefined }],
+    [{ ...TEST_ENV, GITHUB_TOKEN: '' }],
+    [{ ...TEST_ENV, JSON_SCHEMA_CACHE_MODE: '' }],
+    [{ ...TEST_ENV, JSON_SCHEMA_CACHE_MODE: 'Bypass' }],
+    [{ ...TEST_ENV, JSON_SCHEMA_CACHE_MODE: 'off' }],
+    [{ ...TEST_ENV, JSON_SCHEMA_CANONICAL_ORIGIN: '' }],
+    [{ ...TEST_ENV, JSON_SCHEMA_CANONICAL_ORIGIN: 'schemas.example.com' }],
+    [{ ...TEST_ENV, JSON_SCHEMA_CANONICAL_ORIGIN: 'https://schemas.example.com/' }],
+    [{ ...TEST_ENV, JSON_SCHEMA_CANONICAL_ORIGIN: 'https://schemas.example.com/base' }],
+    [{ ...TEST_ENV, JSON_SCHEMA_CANONICAL_ORIGIN: 'ftp://schemas.example.com' }],
+  ])('returns uncached 503 for invalid configuration %o', async (env) => {
     const response = await run(LISTED, {}, env);
     expect(response.status).toBe(503);
     expect(response.headers.get('Cache-Control')).toBe('no-store');
@@ -141,9 +153,39 @@ describe('handleJsonSchemaRequest', () => {
     expectBaseHeaders(response);
   });
 
-  it('accepts the production source defaults when no bindings are set', async () => {
-    const response = await run(LISTED, { method: 'OPTIONS' }, {});
+  it('accepts the defaults when only the token is set', async () => {
+    const response = await run(LISTED, { method: 'OPTIONS' }, { GITHUB_TOKEN: 'test-token' });
     expect(response.status).toBe(204);
+  });
+
+  it('returns 503 without a token, also for preflight', async () => {
+    const response = await run(LISTED, { method: 'OPTIONS' }, {});
+    expect(response.status).toBe(503);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+  });
+
+  it.each([
+    [{ ...TEST_ENV, JSON_SCHEMA_CACHE_MODE: 'immutable' }],
+    [{ ...TEST_ENV, JSON_SCHEMA_CACHE_MODE: 'bypass' }],
+    [{ ...TEST_ENV, JSON_SCHEMA_CANONICAL_ORIGIN: 'https://schemas.example.com' }],
+    [{ ...TEST_ENV, JSON_SCHEMA_CANONICAL_ORIGIN: 'http://localhost:8787' }],
+  ])('accepts valid configuration %o', async (env) => {
+    const response = await run(LISTED, { method: 'OPTIONS' }, env);
+    expect(response.status).toBe(204);
+  });
+
+  it.each([
+    ['malformed 404', '/schemas/nope', 'GET', 404],
+    ['unlisted 404', UNLISTED, 'GET', 404],
+    ['405', LISTED, 'POST', 405],
+    ['listed GET 503', LISTED, 'GET', 503],
+  ])('returns no-store for %s in bypass cache mode', async (_name, path, method, status) => {
+    const env = { ...TEST_ENV, JSON_SCHEMA_CACHE_MODE: 'bypass' };
+    const response = await run(path, { method }, env);
+    expect(response.status).toBe(status);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    const withAuth = await run(path, { method, headers: { Authorization: 'token x' } }, env);
+    expect(withAuth.headers.get('Cache-Control')).toBe('private, no-store');
   });
 
   it('checks configuration before the allowlist', async () => {
@@ -206,6 +248,7 @@ describe('handleJsonSchemaRequest', () => {
     const response = await run(LISTED, { method });
     expect(response.status).toBe(405);
     expect(response.headers.get('Allow')).toBe('GET, OPTIONS');
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
     expectBaseHeaders(response);
   });
 

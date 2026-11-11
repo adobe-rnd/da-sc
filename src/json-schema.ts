@@ -14,15 +14,26 @@ import { JSON_SCHEMA_ALLOWLIST, type JsonSchemaAllowlist } from './json-schema-a
 type JsonSchemaEnv = {
   JSON_SCHEMA_GITHUB_CONTENTS_URL?: string;
   JSON_SCHEMA_GITHUB_REF?: string;
+  JSON_SCHEMA_CACHE_MODE?: string;
+  JSON_SCHEMA_CANONICAL_ORIGIN?: string;
+  GITHUB_TOKEN?: string;
 };
 
-type JsonSchemaSource = {
+type JsonSchemaCacheMode = 'immutable' | 'bypass';
+
+type JsonSchemaConfig = {
   contentsUrl: string;
   ref: string;
+  token: string;
+  cacheMode: JsonSchemaCacheMode;
+  canonicalOrigin: string;
 };
 
 const DEFAULT_CONTENTS_URL = 'https://api.github.com/repos/adobe/da-sc-sdk/contents';
 const DEFAULT_REF = 'main';
+const DEFAULT_CACHE_MODE: JsonSchemaCacheMode = 'immutable';
+// Placeholder until the production hostname is known; replacing it is a cutover step.
+const DEFAULT_CANONICAL_ORIGIN = 'https://schemas.example.invalid';
 const MAX_NAME_LENGTH = 64;
 
 const SCHEMA_PATH = /^\/schemas\/shared\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.json$/;
@@ -52,13 +63,38 @@ export function parseSchemaPath(pathname: string): string | undefined {
   return pathname.slice(1);
 }
 
-function resolveSource(env: JsonSchemaEnv): JsonSchemaSource | undefined {
+function isCacheMode(value: string): value is JsonSchemaCacheMode {
+  return value === 'immutable' || value === 'bypass';
+}
+
+function isOrigin(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (url.protocol === 'https:' || url.protocol === 'http:') && url.origin === value;
+  } catch {
+    return false;
+  }
+}
+
+/** Returns the validated configuration, or \`undefined\` if any binding is invalid. */
+function resolveConfig(env: JsonSchemaEnv): JsonSchemaConfig | undefined {
   const contentsUrl = env.JSON_SCHEMA_GITHUB_CONTENTS_URL ?? DEFAULT_CONTENTS_URL;
   const ref = env.JSON_SCHEMA_GITHUB_REF ?? DEFAULT_REF;
-  if (!CONTENTS_URL.test(contentsUrl) || !REF.test(ref)) {
+  const cacheMode = env.JSON_SCHEMA_CACHE_MODE ?? DEFAULT_CACHE_MODE;
+  const canonicalOrigin = env.JSON_SCHEMA_CANONICAL_ORIGIN ?? DEFAULT_CANONICAL_ORIGIN;
+  const token = env.GITHUB_TOKEN;
+  if (
+    !CONTENTS_URL.test(contentsUrl)
+    || !REF.test(ref)
+    || !isCacheMode(cacheMode)
+    || !isOrigin(canonicalOrigin)
+    || !token
+  ) {
     return undefined;
   }
-  return { contentsUrl, ref };
+  return {
+    contentsUrl, ref, token, cacheMode, canonicalOrigin,
+  };
 }
 
 function textResponse(
@@ -72,8 +108,8 @@ function textResponse(
   });
 }
 
-function notFound(cacheControl?: string): Response {
-  return textResponse(404, 'Not Found', cacheControl ? { 'Cache-Control': cacheControl } : {});
+function notFound(cacheControl: string): Response {
+  return textResponse(404, 'Not Found', { 'Cache-Control': cacheControl });
 }
 
 function serviceUnavailable(): Response {
@@ -87,15 +123,16 @@ async function respond(
 ): Promise<Response> {
   const schemaPath = parseSchemaPath(new URL(request.url).pathname);
   if (!schemaPath) {
-    return notFound();
+    return notFound('no-store');
   }
 
-  if (!resolveSource(env)) {
+  const config = resolveConfig(env);
+  if (!config) {
     return serviceUnavailable();
   }
 
   if (!allowlist.includes(schemaPath)) {
-    return notFound('public, max-age=60');
+    return notFound(config.cacheMode === 'bypass' ? 'no-store' : 'public, max-age=60');
   }
 
   if (request.method === 'OPTIONS') {
@@ -111,7 +148,10 @@ async function respond(
   }
 
   if (request.method !== 'GET') {
-    return textResponse(405, 'Method Not Allowed', { Allow: 'GET, OPTIONS' });
+    return textResponse(405, 'Method Not Allowed', {
+      Allow: 'GET, OPTIONS',
+      'Cache-Control': 'no-store',
+    });
   }
 
   // Fetching from GitHub is not implemented yet.

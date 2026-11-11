@@ -245,16 +245,17 @@ describe('da-sc worker', () => {
 
   describe('/schemas namespace dispatch', () => {
     it.each([
-      '/schemas',
-      '/schemas/',
-      '/schemas/shared/demo-card/v1.0.0.json',
-      '/schemas/anything',
-    ])('returns 404 for %s without calling EDS', async (path) => {
+      ['/schemas', 404],
+      ['/schemas/', 404],
+      ['/schemas/anything', 404],
+      // Valid path; the test environment has no GITHUB_TOKEN.
+      ['/schemas/shared/demo-card/v1.0.0.json', 503],
+    ])('returns the schema handler response for %s without calling EDS', async (path, status) => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch');
       for (const method of ['GET', 'OPTIONS', 'POST']) {
         // eslint-disable-next-line no-await-in-loop
         const response = await runRequest(`http://example.com${path}`, { method });
-        expect(response.status).toBe(404);
+        expect(response.status).toBe(status);
       }
       expect(fetchSpy).not.toHaveBeenCalled();
       expect(mockedConvertHtmlToJson).not.toHaveBeenCalled();
