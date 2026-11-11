@@ -52,3 +52,6 @@ web_modules/
 
 # Distribution files
 dist/
+
+# Local Worker secrets
+.dev.vars*
