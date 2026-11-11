@@ -10,9 +10,13 @@
  * governing permissions and limitations under the License.
  */
 import { handleContentRequest } from './content.js';
+import { handleJsonSchemaRequest, isJsonSchemaPath } from './json-schema.js';
 
 export default {
-  async fetch(request: Request): Promise<Response> {
+  async fetch(request: Request, env: Env, executionCtx: ExecutionContext): Promise<Response> {
+    if (isJsonSchemaPath(new URL(request.url).pathname)) {
+      return handleJsonSchemaRequest(request, env, executionCtx);
+    }
     return handleContentRequest(request);
   },
 };
