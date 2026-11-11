@@ -49,3 +49,6 @@ web_modules/
 
 # Scout generated files
 .scout/
+
+# Distribution files
+dist/
