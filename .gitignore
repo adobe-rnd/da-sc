@@ -46,3 +46,6 @@ web_modules/
 
 # Optional stylelint cache
 .stylelintcache
+
+# Scout generated files
+.scout/
