@@ -1,3 +1,10 @@
+## [1.3.1](https://github.com/adobe-rnd/da-sc/compare/v1.3.0...v1.3.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* **deps:** bump @adobe/da-sc-sdk to 0.6.1 ([#25](https://github.com/adobe-rnd/da-sc/issues/25)) ([adae95e](https://github.com/adobe-rnd/da-sc/commit/adae95ed4b3b51042ef849eb88ce821583ddfc63))
+
 # [1.3.0](https://github.com/adobe-rnd/da-sc/compare/v1.2.1...v1.3.0) (2026-11-16)
 
 
