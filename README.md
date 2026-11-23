@@ -15,6 +15,34 @@ The conversion is handled by `@adobe/da-sc-sdk` (`convertHtmlToJson`), while thi
 - `site`: site name
 - `path`: content path on the EDS domain
 
+## Shared JSON Schemas
+
+The Worker also serves the shared JSON Schemas bundled in `@adobe/da-sc-sdk`:
+
+```
+/schemas/shared/{name}/v{major}.{minor}.{patch}.json
+```
+
+Each schema is served at the path of its `$id` (`https://headless.adobe.net/schemas/shared/...`),
+looked up with the SDK's `getSharedSchemaByPath`. No external service is called.
+
+| Request | Status | `Cache-Control` |
+| --- | --- | --- |
+| `GET` on a known schema path | `200`, `application/schema+json` | `public, max-age=31536000, immutable` |
+| Unknown path, any method | `404` | `public, max-age=60` |
+| `OPTIONS` on a known schema path | `204` (CORS preflight) | none |
+| Other methods on a known schema path | `405` | `no-store` |
+
+- Every response allows any origin (CORS) and carries `X-Content-Type-Options: nosniff` and a
+  restrictive `Content-Security-Policy`.
+- Responses to requests with an `Authorization` header are marked `private, no-store`.
+
+### Adding a schema version
+
+Schemas are defined and versioned in `@adobe/da-sc-sdk`. Published versions are immutable:
+the SDK only adds versions and never changes or removes them. To publish a new version, release
+the SDK and update the dependency in this repository.
+
 ## Commands
 
 - `npm run dev` - start local development server
