@@ -13,9 +13,9 @@ import { handleContentRequest } from './content.js';
 import { handleJsonSchemaRequest, isJsonSchemaPath } from './json-schema.js';
 
 export default {
-  async fetch(request: Request, env: Env, executionCtx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request): Promise<Response> {
     if (isJsonSchemaPath(new URL(request.url).pathname)) {
-      return handleJsonSchemaRequest(request, env, executionCtx);
+      return handleJsonSchemaRequest(request);
     }
     return handleContentRequest(request);
   },

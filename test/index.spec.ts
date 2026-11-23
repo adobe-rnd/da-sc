@@ -12,12 +12,12 @@
 import {
   afterEach, beforeEach, describe, expect, it, vi,
 } from 'vitest';
-import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test';
 import worker from '../src';
 
 const mockedConvertHtmlToJson = vi.hoisted(() => vi.fn());
 
-vi.mock('@adobe/da-sc-sdk', () => ({
+vi.mock('@adobe/da-sc-sdk', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@adobe/da-sc-sdk')>(),
   convertHtmlToJson: mockedConvertHtmlToJson,
 }));
 
@@ -25,10 +25,7 @@ const MOCK_EDS_HTML = '<main>stub</main>';
 
 async function runRequest(url: string, init?: RequestInit): Promise<Response> {
   const request = new Request(url, init);
-  const executionCtx = createExecutionContext();
-  const response = await worker.fetch(request, env, executionCtx);
-  await waitOnExecutionContext(executionCtx);
-  return response;
+  return worker.fetch(request);
 }
 
 describe('da-sc worker', () => {
@@ -324,6 +321,15 @@ describe('da-sc worker', () => {
         const response = await runRequest(`http://example.com${path}`, { method });
         expect(response.status).toBe(404);
       }
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(mockedConvertHtmlToJson).not.toHaveBeenCalled();
+    });
+
+    it('serves a shared schema from the SDK without calling EDS', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      const response = await runRequest('http://example.com/schemas/shared/image/v1.0.0.json');
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Content-Type')).toBe('application/schema+json');
       expect(fetchSpy).not.toHaveBeenCalled();
       expect(mockedConvertHtmlToJson).not.toHaveBeenCalled();
     });
