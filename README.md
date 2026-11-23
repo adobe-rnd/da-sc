@@ -29,8 +29,8 @@ looked up with the SDK's `getSharedSchemaByPath`. No external service is called.
 | Request | Status | `Cache-Control` |
 | --- | --- | --- |
 | `GET` on a known schema path | `200`, `application/schema+json` | `public, max-age=31536000, immutable` |
-| Unknown path, any method | `404` | `public, max-age=60` |
-| `OPTIONS` on a known schema path | `204` (CORS preflight) | none |
+| `OPTIONS` on any `/schemas` path | `204` (CORS preflight) | none |
+| Unknown path, other methods | `404` | `public, max-age=60` |
 | Other methods on a known schema path | `405` | `no-store` |
 
 - Every response allows any origin (CORS) and carries `X-Content-Type-Options: nosniff` and a

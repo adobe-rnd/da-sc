@@ -63,8 +63,8 @@ describe('handleJsonSchemaRequest', () => {
     LISTED.replace('/v', '/V'),
     LISTED.replace('.json', '%2Ejson'),
     LISTED.replace('/schemas/', '/schemas//'),
-  ])('returns 404 for %s, cacheable for 60 s, for every method', async (path) => {
-    for (const method of ['GET', 'OPTIONS', 'POST']) {
+  ])('returns 404 for %s, cacheable for 60 s, for GET and POST', async (path) => {
+    for (const method of ['GET', 'POST']) {
       // eslint-disable-next-line no-await-in-loop
       const response = await run(path, { method });
       expect(response.status).toBe(404);
@@ -77,6 +77,13 @@ describe('handleJsonSchemaRequest', () => {
   it('ignores query strings', async () => {
     const response = await run(`${LISTED}?v=2&ref=other`);
     expect(response.status).toBe(200);
+  });
+
+  it.each(['/schemas', UNKNOWN])('answers preflight for %s without a lookup', async (path) => {
+    const response = await run(path, { method: 'OPTIONS' });
+    expect(response.status).toBe(204);
+    expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, OPTIONS');
+    expectBaseHeaders(response);
   });
 
   it('answers a realistic browser preflight', async () => {

@@ -33,11 +33,7 @@ function textResponse(status: number, body: string, headers: Record<string, stri
 }
 
 function respond(request: Request): Response {
-  const lookup = getSharedSchemaByPath({ path: new URL(request.url).pathname });
-  if ('error' in lookup) {
-    return textResponse(404, 'Not Found', { 'Cache-Control': NOT_FOUND_CACHE_CONTROL });
-  }
-
+  // Like the content handler, answer every preflight without a lookup.
   if (request.method === 'OPTIONS') {
     return new Response(null, {
       status: 204,
@@ -48,6 +44,11 @@ function respond(request: Request): Response {
         'Access-Control-Max-Age': '86400',
       },
     });
+  }
+
+  const lookup = getSharedSchemaByPath({ path: new URL(request.url).pathname });
+  if ('error' in lookup) {
+    return textResponse(404, 'Not Found', { 'Cache-Control': NOT_FOUND_CACHE_CONTROL });
   }
 
   if (request.method !== 'GET') {

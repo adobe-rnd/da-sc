@@ -314,13 +314,15 @@ describe('da-sc worker', () => {
       '/schemas/',
       '/schemas/shared/demo-card/v1.0.0.json',
       '/schemas/anything',
-    ])('returns 404 for %s without calling EDS', async (path) => {
+    ])('returns 404 (204 for OPTIONS) for %s without calling EDS', async (path) => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch');
-      for (const method of ['GET', 'OPTIONS', 'POST']) {
+      for (const method of ['GET', 'POST']) {
         // eslint-disable-next-line no-await-in-loop
         const response = await runRequest(`http://example.com${path}`, { method });
         expect(response.status).toBe(404);
       }
+      const preflight = await runRequest(`http://example.com${path}`, { method: 'OPTIONS' });
+      expect(preflight.status).toBe(204);
       expect(fetchSpy).not.toHaveBeenCalled();
       expect(mockedConvertHtmlToJson).not.toHaveBeenCalled();
     });
