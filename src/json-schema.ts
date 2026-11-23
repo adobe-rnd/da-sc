@@ -9,10 +9,11 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { getSharedSchemaByPath } from '@adobe/da-sc-sdk';
+import { getSharedSchema } from '@adobe/da-sc-sdk';
 
 const IMMUTABLE_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 const NOT_FOUND_CACHE_CONTROL = 'public, max-age=60';
+const SCHEMA_PATH = /^\/schemas\/shared\/([^/]+)\/v([^/]+)\.json$/;
 
 const BASE_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -46,8 +47,9 @@ function respond(request: Request): Response {
     });
   }
 
-  const lookup = getSharedSchemaByPath({ path: new URL(request.url).pathname });
-  if ('error' in lookup) {
+  const [, name, version] = SCHEMA_PATH.exec(new URL(request.url).pathname) ?? [];
+  const lookup = name && version ? getSharedSchema({ name, version }) : undefined;
+  if (!lookup || 'error' in lookup) {
     return textResponse(404, 'Not Found', { 'Cache-Control': NOT_FOUND_CACHE_CONTROL });
   }
 

@@ -24,7 +24,7 @@ The Worker also serves the shared JSON Schemas bundled in `@adobe/da-sc-sdk`:
 ```
 
 Each schema is served at the path of its `$id` (`https://headless.adobe.net/schemas/shared/...`),
-looked up with the SDK's `getSharedSchemaByPath`. No external service is called.
+looked up by name and version with the SDK's `getSharedSchema`. No external service is called.
 
 | Request | Status | `Cache-Control` |
 | --- | --- | --- |

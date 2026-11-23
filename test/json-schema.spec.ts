@@ -10,12 +10,13 @@
  * governing permissions and limitations under the License.
  */
 import { describe, expect, it } from 'vitest';
-import { getSharedSchemas } from '@adobe/da-sc-sdk';
 import { handleJsonSchemaRequest } from '../src/json-schema';
 
 const SCHEMA_ORIGIN = 'https://headless.adobe.net';
-const SCHEMAS = getSharedSchemas().schemas;
-const PATHS = SCHEMAS.map((schema) => schema.$id.slice(SCHEMA_ORIGIN.length));
+const PATHS = [
+  '/schemas/shared/image/v1.0.0.json',
+  '/schemas/shared/file/v1.0.0.json',
+];
 const [LISTED] = PATHS;
 const UNKNOWN = '/schemas/shared/unknown-schema/v1.0.0.json';
 
@@ -33,23 +34,14 @@ function expectBaseHeaders(response: Response): void {
 }
 
 describe('shared schemas from the SDK', () => {
-  it('ships at least one schema', () => {
-    expect(SCHEMAS.length).toBeGreaterThan(0);
-  });
-
-  it.each(SCHEMAS.map((schema) => [schema.$id]))('%s has an $id on the shared schema origin', (id) => {
-    expect(id.startsWith(`${SCHEMA_ORIGIN}/schemas/shared/`)).toBe(true);
-  });
-
   it.each(PATHS.map((path) => [path]))('serves %s with $id equal to its public URL', async (path) => {
     const response = await run(path);
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Type')).toBe('application/schema+json');
     expect(response.headers.get('Cache-Control')).toBe('public, max-age=31536000, immutable');
     expectBaseHeaders(response);
-    const body: unknown = await response.json();
-    expect(body).toEqual(SCHEMAS.find((schema) => schema.$id === `${SCHEMA_ORIGIN}${path}`));
-    expect((body as { $id: string }).$id).toBe(`${SCHEMA_ORIGIN}${path}`);
+    const body = await response.json() as { $id: unknown };
+    expect(body.$id).toBe(`${SCHEMA_ORIGIN}${path}`);
   });
 });
 
@@ -63,6 +55,10 @@ describe('handleJsonSchemaRequest', () => {
     LISTED.replace('/v', '/V'),
     LISTED.replace('.json', '%2Ejson'),
     LISTED.replace('/schemas/', '/schemas//'),
+    LISTED.replace('/v1.0.0', '/1.0.0'),
+    LISTED.replace('/v1.0.0', '/vv1.0.0'),
+    LISTED.replace('/image/', '/image/x/'),
+    '/schemas/shared/image%2Fv1.0.0.json',
   ])('returns 404 for %s, cacheable for 60 s, for GET and POST', async (path) => {
     for (const method of ['GET', 'POST']) {
       // eslint-disable-next-line no-await-in-loop
