@@ -40,6 +40,6 @@
     "*.{js,ts}": "eslint --fix"
   },
   "dependencies": {
-    "@adobe/da-sc-sdk": "^0.6.1"
+    "@adobe/da-sc-sdk": "github:adobe/da-sc-sdk#feat-shared-schemas"
   }
 }
