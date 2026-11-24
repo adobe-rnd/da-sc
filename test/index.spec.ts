@@ -306,4 +306,88 @@ describe('da-sc worker', () => {
       }),
     );
   });
+
+  describe('failure logging', () => {
+    it('logs 5xx EDS errors with truncated body, without the token', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response('x'.repeat(500), { status: 503, headers: { 'x-error': 'backend down' } }),
+      );
+
+      await runRequest('http://example.com/live/org/site/page', {
+        headers: { Authorization: 'token secret-value' },
+      });
+
+      expect(errorSpy).toHaveBeenCalledWith({
+        status: 503,
+        event: 'eds_error',
+        edsUrl: 'https://main--site--org.aem.live/page',
+        xError: 'backend down',
+        authenticated: true,
+        body: 'x'.repeat(200),
+      });
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('secret-value');
+    });
+
+    it('logs EDS 404 as a warning without the body', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('<html>not found</html>', { status: 404 }));
+
+      await runRequest('http://example.com/preview/org/site/missing');
+
+      expect(warnSpy).toHaveBeenCalledWith({
+        status: 404,
+        event: 'eds_error',
+        edsUrl: 'https://main--site--org.aem.page/missing',
+        xError: null,
+        authenticated: false,
+      });
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('logs conversion failures as errors', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(MOCK_EDS_HTML, { status: 200 }));
+      mockedConvertHtmlToJson.mockReturnValue({ error: 'schema mismatch' });
+
+      await runRequest('http://example.com/preview/org/site/path');
+
+      expect(errorSpy).toHaveBeenCalledWith({
+        status: 500, event: 'conversion_error', edsUrl: 'https://main--site--org.aem.page/path', error: 'schema mismatch',
+      });
+    });
+
+    it('logs failed EDS requests as errors', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network lost'));
+
+      await runRequest('http://example.com/preview/org/site/path');
+
+      expect(errorSpy).toHaveBeenCalledWith({
+        status: 502, event: 'fetch_error', edsUrl: 'https://main--site--org.aem.page/path', error: 'network lost',
+      });
+    });
+
+    it('logs unhandled errors', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await runRequest('http://example.com/preview');
+
+      expect(errorSpy).toHaveBeenCalledWith({
+        status: 500, event: 'unhandled_error', path: '/preview', error: 'Usage: /tld/org/site/path',
+      });
+    });
+
+    it('does not log successful requests', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(MOCK_EDS_HTML, { status: 200 }));
+
+      await runRequest('http://example.com/preview/org/site/path');
+
+      expect(errorSpy).not.toHaveBeenCalled();
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+  });
 });
