@@ -120,41 +120,89 @@ describe('da-sc worker', () => {
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
   });
 
-  it('returns 500 when a non-Error is thrown', async () => {
+  it('returns 502 with no-store when EDS is not reachable', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue('upstream timeout');
 
     const response = await runRequest('http://example.com/preview/org/site/path');
 
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(502);
     expect(response.headers.get('Content-Type')).toContain('application/json');
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
     const body = await response.json() as { error: string };
     expect(body.error).toBe('upstream timeout');
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
   });
 
-  it('JSON response sets Cache-Control when token Authorization is present', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(MOCK_EDS_HTML, { status: 200 }));
-    const response = await runRequest('http://example.com/preview/org/site/page', {
+  it('returns private, no-store when EDS is not reachable with a token', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('connect failed'));
+
+    const response = await runRequest('http://example.com/preview/org/site/path', {
+      headers: { Authorization: 'token x' },
+    });
+
+    expect(response.status).toBe(502);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+  });
+
+  it('sets no-store on own errors', async () => {
+    const methodResponse = await runRequest('http://example.com/preview/org/site/path', {
+      method: 'POST',
+    });
+    expect(methodResponse.headers.get('Cache-Control')).toBe('no-store');
+
+    const ctxResponse = await runRequest('http://example.com/preview');
+    expect(ctxResponse.headers.get('Cache-Control')).toBe('no-store');
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(MOCK_EDS_HTML, {
+      status: 200,
+      headers: { 'Cache-Control': 'max-age=60, must-revalidate' },
+    }));
+    mockedConvertHtmlToJson.mockReturnValue({ error: 'schema mismatch' });
+    const convResponse = await runRequest('http://example.com/preview/org/site/path');
+    expect(convResponse.status).toBe(500);
+    expect(convResponse.headers.get('Cache-Control')).toBe('no-store');
+  });
+
+  it('JSON response sets private, no-store when token Authorization is present', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(MOCK_EDS_HTML, {
+      status: 200,
+      headers: { 'Cache-Control': 'max-age=7200, must-revalidate' },
+    }));
+    const response = await runRequest('http://example.com/live/org/site/page', {
       headers: { Authorization: 'token x' },
     });
     expect(response.status).toBe(200);
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
   });
 
-  it('JSON response omits Cache-Control without Authorization', async () => {
+  it('JSON response forwards EDS Cache-Control without Authorization', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(MOCK_EDS_HTML, {
+      status: 200,
+      headers: { 'Cache-Control': 'max-age=7200, must-revalidate' },
+    }));
+    const response = await runRequest('http://example.com/live/org/site/page');
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('max-age=7200, must-revalidate');
+    expect(response.headers.get('Access-Control-Expose-Headers')).toContain('Cache-Control');
+  });
+
+  it('JSON response uses no-store when EDS sends no Cache-Control', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(MOCK_EDS_HTML, { status: 200 }));
     const response = await runRequest('http://example.com/preview/org/site/page');
     expect(response.status).toBe(200);
-    expect(response.headers.get('Cache-Control')).toBeNull();
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
   });
 
-  it('JSON response omits Cache-Control for Bearer (only token scheme is supported)', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(MOCK_EDS_HTML, { status: 200 }));
+  it('JSON response forwards EDS Cache-Control for Bearer (only token scheme is supported)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(MOCK_EDS_HTML, {
+      status: 200,
+      headers: { 'Cache-Control': 'max-age=60, must-revalidate' },
+    }));
     const response = await runRequest('http://example.com/preview/org/site/page', {
       headers: { Authorization: 'Bearer x' },
     });
     expect(response.status).toBe(200);
-    expect(response.headers.get('Cache-Control')).toBeNull();
+    expect(response.headers.get('Cache-Control')).toBe('max-age=60, must-revalidate');
   });
 
   it('returns JSON error with EDS body (including empty)', async () => {
@@ -189,18 +237,18 @@ describe('da-sc worker', () => {
     expect(response.headers.get('Access-Control-Expose-Headers')).toContain('Cache-Control');
   });
 
-  it('sets Cache-Control to private, no-store on EDS error responses', async () => {
+  it('sets Cache-Control to no-store on EDS 5xx responses', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('upstream-error', {
-        status: 502,
+        status: 503,
         headers: {
-          'Cache-Control': 'no-store',
+          'Cache-Control': 'max-age=60',
         },
       }),
     );
     const response = await runRequest('http://example.com/preview/org/site/page');
-    expect(response.status).toBe(502);
-    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(response.status).toBe(503);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
     const body = await response.json() as { error: string };
     expect(body.error).toBe('upstream-error');
   });
@@ -222,7 +270,27 @@ describe('da-sc worker', () => {
     const body = await response.json() as { error: string };
     expect(body.error).toBe('404 Not Found');
     expect(response.headers.get('X-Error')).toBe('NOT_FOUND');
+    expect(response.headers.get('Cache-Control')).toBe('max-age=60');
+  });
+
+  it('uses private, no-store on EDS 404 with a token', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('not found', { status: 404, headers: { 'Cache-Control': 'max-age=60' } }),
+    );
+    const response = await runRequest('http://example.com/preview/org/site/missing', {
+      headers: { Authorization: 'token x' },
+    });
+    expect(response.status).toBe(404);
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+  });
+
+  it('uses no-store on EDS 403 even if EDS sends Cache-Control', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('forbidden', { status: 403, headers: { 'Cache-Control': 'max-age=60' } }),
+    );
+    const response = await runRequest('http://example.com/preview/org/site/page');
+    expect(response.status).toBe(403);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
   });
 
   it('forwards Authorization token scheme to EDS fetch', async () => {

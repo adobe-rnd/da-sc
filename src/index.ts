@@ -12,6 +12,9 @@
 import { convertHtmlToJson } from '@adobe/da-sc-sdk';
 import { getCtx } from './context.js';
 
+const NO_STORE = 'no-store';
+const PRIVATE_NO_STORE = 'private, no-store';
+
 /**
  * Returns `Authorization` only for the `token` scheme (`Authorization: token <secret>`).
  * Other schemes (e.g. `Bearer`, `Basic`) are not supported and yield `undefined`.
@@ -21,15 +24,30 @@ function getAuthorizationToken(request: Request): string | undefined {
   return auth && /^token\s+/i.test(auth.trimStart()) ? auth.trim() : undefined;
 }
 
+/**
+ * Cache-Control for a response derived from an EDS answer. EDS's value is forwarded only
+ * for `200` and `404`; token requests are never cacheable by shared caches.
+ */
+function getCacheControl(edsResp: Response, tokenAuth: string | undefined): string {
+  if (tokenAuth) {
+    return PRIVATE_NO_STORE;
+  }
+  if (edsResp.status === 200 || edsResp.status === 404) {
+    return edsResp.headers.get('Cache-Control') ?? NO_STORE;
+  }
+  return NO_STORE;
+}
+
 export default {
   async fetch(request: Request): Promise<Response> {
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    };
+    const tokenAuth = getAuthorizationToken(request);
+    const ownErrorCacheControl = tokenAuth ? PRIVATE_NO_STORE : NO_STORE;
     try {
-      const corsHeaders = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      };
-
       if (new URL(request.url).pathname === '/favicon.ico') {
         return new Response('', { status: 404 });
       }
@@ -47,16 +65,31 @@ export default {
           headers: {
             ...corsHeaders,
             'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': ownErrorCacheControl,
           },
         });
       }
       const ctx = getCtx(request.url);
       const edsContentUrl = `${ctx.edsDomainUrl}/${ctx.contentPath}`;
-      const tokenAuth = getAuthorizationToken(request);
-      const edsResp = await fetch(edsContentUrl, {
-        cf: { scrapeShield: false },
-        ...(tokenAuth ? { headers: { Authorization: tokenAuth } } : {}),
-      });
+      let edsResp: Response;
+      try {
+        edsResp = await fetch(edsContentUrl, {
+          cf: { scrapeShield: false },
+          ...(tokenAuth ? { headers: { Authorization: tokenAuth } } : {}),
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return new Response(JSON.stringify({ error: message }), {
+          status: 502,
+          headers: {
+            ...corsHeaders,
+            'Access-Control-Expose-Headers': 'Cache-Control',
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': ownErrorCacheControl,
+          },
+        });
+      }
+      const cacheControl = getCacheControl(edsResp, tokenAuth);
       if (!edsResp.ok) {
         const { status } = edsResp;
         const xError = edsResp.headers.get('x-error') ?? edsResp.headers.get('X-Error');
@@ -66,7 +99,7 @@ export default {
           ...corsHeaders,
           'Access-Control-Expose-Headers': 'X-Error, Cache-Control',
           'Content-Type': 'application/json; charset=utf-8',
-          'Cache-Control': 'private, no-store',
+          'Cache-Control': cacheControl,
         };
         if (xError) {
           errHeaders['X-Error'] = xError;
@@ -82,21 +115,21 @@ export default {
       if ('error' in conversion) {
         return new Response(`Failed to convert EDS HTML: ${conversion.error}`, {
           status: 500,
-          headers: corsHeaders,
+          headers: {
+            ...corsHeaders,
+            'Cache-Control': ownErrorCacheControl,
+          },
         });
       }
       const { json } = conversion;
 
-      const jsonHeaders: Record<string, string> = {
-        ...corsHeaders,
-        'Content-Type': 'application/json; charset=utf-8',
-      };
-      if (tokenAuth) {
-        jsonHeaders['Cache-Control'] = 'private, no-store';
-      }
-
       return new Response(JSON.stringify(json, null, 2), {
-        headers: jsonHeaders,
+        headers: {
+          ...corsHeaders,
+          'Access-Control-Expose-Headers': 'Cache-Control',
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': cacheControl,
+        },
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -105,6 +138,7 @@ export default {
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': ownErrorCacheControl,
         },
       });
     }
