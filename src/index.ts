@@ -21,6 +21,22 @@ function getAuthorizationToken(request: Request): string | undefined {
   return auth && /^token\s+/i.test(auth.trimStart()) ? auth.trim() : undefined;
 }
 
+const MAX_LOGGED_BODY_LENGTH = 200;
+
+/**
+ * Emits a structured log entry for Workers Logs. 5xx are logged as errors, everything else as
+ * warnings, so expected client errors (e.g. 404) don't surface as failures in Workers Issues.
+ * Never pass secrets (e.g. the Authorization token) in `details`.
+ */
+function logFailure(status: number, details: Record<string, unknown>): void {
+  const entry = { status, ...details };
+  if (status >= 500) {
+    console.error(entry);
+  } else {
+    console.warn(entry);
+  }
+}
+
 export default {
   async fetch(request: Request): Promise<Response> {
     try {
@@ -62,6 +78,13 @@ export default {
         const xError = edsResp.headers.get('x-error') ?? edsResp.headers.get('X-Error');
         const upstreamText = await edsResp.text();
         const returnedError = status === 404 ? '404 Not Found' : upstreamText;
+        logFailure(status, {
+          event: 'eds_error',
+          edsUrl: edsContentUrl,
+          xError,
+          authenticated: Boolean(tokenAuth),
+          ...(status === 404 ? {} : { body: upstreamText.slice(0, MAX_LOGGED_BODY_LENGTH) }),
+        });
         const errHeaders: Record<string, string> = {
           ...corsHeaders,
           'Access-Control-Expose-Headers': 'X-Error, Cache-Control',
@@ -80,6 +103,7 @@ export default {
       const html = await edsResp.text();
       const conversion = convertHtmlToJson({ html });
       if ('error' in conversion) {
+        logFailure(500, { event: 'conversion_error', edsUrl: edsContentUrl, error: conversion.error });
         return new Response(`Failed to convert EDS HTML: ${conversion.error}`, {
           status: 500,
           headers: corsHeaders,
@@ -100,6 +124,7 @@ export default {
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
+      logFailure(500, { event: 'unhandled_error', path: new URL(request.url).pathname, error: message });
       return new Response(JSON.stringify({ error: message }), {
         status: 500,
         headers: {
