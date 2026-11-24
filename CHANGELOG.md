@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/adobe-rnd/da-sc/compare/v1.3.1...v1.4.0) (2026-11-24)
+
+
+### Features
+
+* forward EDS Cache-Control for content responses ([201ac4b](https://github.com/adobe-rnd/da-sc/commit/201ac4bab228a754343764ec9a23a38caf78ce7a))
+
 ## [1.3.1](https://github.com/adobe-rnd/da-sc/compare/v1.3.0...v1.3.1) (2026-11-16)
 
 
