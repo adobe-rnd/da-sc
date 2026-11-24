@@ -49,3 +49,9 @@ web_modules/
 
 # Scout generated files
 .scout/
+
+# Distribution files
+dist/
+
+# Local Worker secrets
+.dev.vars*

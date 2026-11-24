@@ -16,7 +16,8 @@ import worker from '../src';
 
 const mockedConvertHtmlToJson = vi.hoisted(() => vi.fn());
 
-vi.mock('@adobe/da-sc-sdk', () => ({
+vi.mock('@adobe/da-sc-sdk', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@adobe/da-sc-sdk')>(),
   convertHtmlToJson: mockedConvertHtmlToJson,
 }));
 
@@ -305,5 +306,41 @@ describe('da-sc worker', () => {
         headers: { Authorization: 'token secret-value' },
       }),
     );
+  });
+
+  describe('/schemas namespace dispatch', () => {
+    it.each([
+      '/schemas',
+      '/schemas/',
+      '/schemas/shared/demo-card/v1.0.0.json',
+      '/schemas/anything',
+    ])('returns 404 (204 for OPTIONS) for %s without calling EDS', async (path) => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      for (const method of ['GET', 'POST']) {
+        // eslint-disable-next-line no-await-in-loop
+        const response = await runRequest(`http://example.com${path}`, { method });
+        expect(response.status).toBe(404);
+      }
+      const preflight = await runRequest(`http://example.com${path}`, { method: 'OPTIONS' });
+      expect(preflight.status).toBe(204);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(mockedConvertHtmlToJson).not.toHaveBeenCalled();
+    });
+
+    it('serves a shared schema from the SDK without calling EDS', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      const response = await runRequest('http://example.com/schemas/shared/image/v1.0.0.json');
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Content-Type')).toBe('application/schema+json');
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(mockedConvertHtmlToJson).not.toHaveBeenCalled();
+    });
+
+    it('does not reserve /schemas-other', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(MOCK_EDS_HTML));
+      const response = await runRequest('http://example.com/schemas-other/site/path');
+      expect(response.status).toBe(200);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
   });
 });
