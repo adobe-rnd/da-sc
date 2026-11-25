@@ -1,3 +1,10 @@
+## [1.4.1](https://github.com/adobe-rnd/da-sc/compare/v1.4.0...v1.4.1) (2026-11-24)
+
+
+### Bug Fixes
+
+* enable Workers Logs and log failed requests ([#29](https://github.com/adobe-rnd/da-sc/issues/29)) ([ce6b2eb](https://github.com/adobe-rnd/da-sc/commit/ce6b2eb152f1cc9a33eb011c7fc7976bbb4d750c))
+
 # [1.4.0](https://github.com/adobe-rnd/da-sc/compare/v1.3.1...v1.4.0) (2026-11-24)
 
 
