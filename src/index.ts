@@ -10,7 +10,11 @@
  * governing permissions and limitations under the License.
  */
 import { convertHtmlToJson } from '@adobe/da-sc-sdk';
-import { getCtx } from './context.js';
+import { getContentRoute, getCtx } from './context.js';
+import {
+  copyEdsCacheHeaders, getEdsCacheRequest, mapEdsLocation, type CacheEnv,
+} from './eds-cache.js';
+import { getJsonEtag, matchesJsonEtag } from './json-etag.js';
 
 const NO_STORE = 'no-store';
 const PRIVATE_NO_STORE = 'private, no-store';
@@ -25,10 +29,10 @@ function getAuthorizationToken(request: Request): string | undefined {
 }
 
 /**
- * Cache-Control for a response derived from an EDS answer. EDS's value is forwarded only
+ * Legacy Cache-Control outside the EDS caching routes. EDS's value is forwarded only
  * for `200` and `404`; token requests are never cacheable by shared caches.
  */
-function getCacheControl(edsResp: Response, tokenAuth: string | undefined): string {
+function getLegacyCacheControl(edsResp: Response, tokenAuth: string | undefined): string {
   if (tokenAuth) {
     return PRIVATE_NO_STORE;
   }
@@ -55,7 +59,7 @@ function logFailure(status: number, details: Record<string, unknown>): void {
 }
 
 export default {
-  async fetch(request: Request): Promise<Response> {
+  async fetch(request: Request, env: CacheEnv = {}): Promise<Response> {
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
@@ -64,8 +68,12 @@ export default {
     const tokenAuth = getAuthorizationToken(request);
     const ownErrorCacheControl = tokenAuth ? PRIVATE_NO_STORE : NO_STORE;
     try {
-      if (new URL(request.url).pathname === '/favicon.ico') {
+      const requestUrl = new URL(request.url);
+      if (requestUrl.pathname === '/favicon.ico') {
         return new Response('', { status: 404 });
+      }
+      if (getContentRoute(requestUrl.pathname)) {
+        corsHeaders['Access-Control-Allow-Headers'] += ', If-None-Match';
       }
 
       if (request.method === 'OPTIONS') {
@@ -87,11 +95,14 @@ export default {
       }
       const ctx = getCtx(request.url);
       const edsContentUrl = `${ctx.edsDomainUrl}/${ctx.contentPath}`;
+      const { contentRoute } = ctx;
+      const edsCache = contentRoute && getEdsCacheRequest(request.headers, tokenAuth, env);
       let edsResp: Response;
       try {
         edsResp = await fetch(edsContentUrl, {
           cf: { scrapeShield: false },
-          ...(tokenAuth ? { headers: { Authorization: tokenAuth } } : {}),
+          ...(edsCache ? { redirect: 'manual', headers: edsCache.headers } : {}),
+          ...(!edsCache && tokenAuth ? { headers: { Authorization: tokenAuth } } : {}),
         });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
@@ -106,9 +117,25 @@ export default {
           },
         });
       }
-      const cacheControl = getCacheControl(edsResp, tokenAuth);
+      const responseHeaders = new Headers(corsHeaders);
+      const { status } = edsResp;
+      if (contentRoute && edsCache) {
+        copyEdsCacheHeaders(edsResp, responseHeaders, edsCache);
+        const redirect = status >= 300 && status < 400 && status !== 304;
+        if (redirect || status === 204 || status === 205 || status === 304) {
+          responseHeaders.set('Access-Control-Expose-Headers', 'X-Error, Cache-Control');
+          const location = redirect && edsResp.headers.get('Location');
+          if (location) {
+            responseHeaders.set('Location', mapEdsLocation(location, edsContentUrl, requestUrl, contentRoute));
+          }
+          await edsResp.body?.cancel();
+          return new Response(null, { status, headers: responseHeaders });
+        }
+      } else {
+        responseHeaders.set('Cache-Control', getLegacyCacheControl(edsResp, tokenAuth));
+      }
+      responseHeaders.set('Content-Type', 'application/json; charset=utf-8');
       if (!edsResp.ok) {
-        const { status } = edsResp;
         const xError = edsResp.headers.get('x-error') ?? edsResp.headers.get('X-Error');
         const upstreamText = await edsResp.text();
         const returnedError = status === 404 ? '404 Not Found' : upstreamText;
@@ -119,18 +146,13 @@ export default {
           authenticated: Boolean(tokenAuth),
           ...(status === 404 ? {} : { body: upstreamText.slice(0, MAX_LOGGED_BODY_LENGTH) }),
         });
-        const errHeaders: Record<string, string> = {
-          ...corsHeaders,
-          'Access-Control-Expose-Headers': 'X-Error, Cache-Control',
-          'Content-Type': 'application/json; charset=utf-8',
-          'Cache-Control': cacheControl,
-        };
+        responseHeaders.set('Access-Control-Expose-Headers', 'X-Error, Cache-Control');
         if (xError) {
-          errHeaders['X-Error'] = xError;
+          responseHeaders.set('X-Error', xError);
         }
         return new Response(JSON.stringify({ error: returnedError }), {
           status,
-          headers: errHeaders,
+          headers: responseHeaders,
         });
       }
 
@@ -146,16 +168,20 @@ export default {
           },
         });
       }
-      const { json } = conversion;
-
-      return new Response(JSON.stringify(json, null, 2), {
-        headers: {
-          ...corsHeaders,
-          'Access-Control-Expose-Headers': 'Cache-Control',
-          'Content-Type': 'application/json; charset=utf-8',
-          'Cache-Control': cacheControl,
-        },
-      });
+      const json = JSON.stringify(conversion.json, null, 2);
+      responseHeaders.set('Access-Control-Expose-Headers', 'Cache-Control');
+      if (contentRoute && status === 200) {
+        const bytes = new TextEncoder().encode(json);
+        const etag = await getJsonEtag(bytes);
+        responseHeaders.set('ETag', etag);
+        responseHeaders.set('Access-Control-Expose-Headers', 'Cache-Control, ETag');
+        if (matchesJsonEtag(request.headers.get('If-None-Match'), etag)) {
+          responseHeaders.delete('Content-Type');
+          return new Response(null, { status: 304, headers: responseHeaders });
+        }
+        return new Response(bytes, { status, headers: responseHeaders });
+      }
+      return new Response(json, { status: contentRoute ? status : 200, headers: responseHeaders });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       logFailure(500, { event: 'unhandled_error', path: new URL(request.url).pathname, error: message });

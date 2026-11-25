@@ -13,12 +13,18 @@ head_sampling_rate = 1
 VERSION = "@@VERSION@@-dev"
 ENVIRONMENT = "dev"
 
+# Worker-wide opt-in for token caching and forwarding X-Push-Invalidation.
+# Before enabling it, verify login before shared-cache lookup. CDNs should
+# request the longer TTL only after verifying tag purges for cached 200s and 404s.
+ENABLE_EDS_AUTH_CACHE_AND_PUSH_INVALIDATION = false
+
 # CI environment
 [env.ci]
 name = "da-sc-ci"
 [env.ci.vars]
 VERSION = "@@VERSION@@-ci"
 ENVIRONMENT = "ci"
+ENABLE_EDS_AUTH_CACHE_AND_PUSH_INVALIDATION = false
 
 # Production environment
 [env.production]
@@ -26,3 +32,4 @@ name = "da-sc"
 [env.production.vars]
 VERSION = "@@VERSION@@"
 ENVIRONMENT = "production"
+ENABLE_EDS_AUTH_CACHE_AND_PUSH_INVALIDATION = false

@@ -20,6 +20,9 @@ describe('getCtx', () => {
       site: 'site',
       edsDomainUrl: 'https://main--site--org.aem.page',
       contentPath: 'path/to/doc',
+      contentRoute: {
+        tier: 'preview', org: 'org', site: 'site', path: 'path/to/doc', suffix: '',
+      },
     });
   });
 
@@ -36,6 +39,21 @@ describe('getCtx', () => {
   it('strips .json suffix from the content path', () => {
     const ctx = getCtx('https://worker.example/preview/org/site/blog/post.json');
     expect(ctx.contentPath).toBe('blog/post');
+  });
+
+  it('preserves internal .json occurrences for EDS caching routes', () => {
+    const ctx = getCtx('https://worker.example/preview/org/site/blog.json/post.json.json?x=1');
+    expect(ctx.contentPath).toBe('blog.json/post.json');
+    expect(ctx.contentRoute?.suffix).toBe('.json');
+    expect(getCtx('https://worker.example/preview/org/site/blog.json/post').contentPath)
+      .toBe('blog.json/post');
+  });
+
+  it('does not enable EDS caching for unknown tiers or incomplete routes', () => {
+    const legacy = getCtx('https://worker.example/stage/org/site/blog.json/post');
+    expect(legacy.contentPath).toBe('blog/post');
+    expect(legacy.contentRoute).toBeUndefined();
+    expect(getCtx('https://worker.example/live/org/site').contentRoute).toBeUndefined();
   });
 
   it('throws usage error when org and site are missing', () => {
