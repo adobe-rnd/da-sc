@@ -58,24 +58,42 @@ describe('handleJsonSchemaRequest', () => {
     '/schemas',
     '/schemas/',
     '/schemas/shared/',
-    UNKNOWN,
     `${LISTED}/`,
     LISTED.replace('/v', '/V'),
     LISTED.replace('.json', '%2Ejson'),
     LISTED.replace('/schemas/', '/schemas//'),
     LISTED.replace('/v1.0.0', '/1.0.0'),
     LISTED.replace('/v1.0.0', '/vv1.0.0'),
+    LISTED.replace('/v1.0.0', '/v1.0'),
+    LISTED.replace('/v1.0.0', '/v01.0.0'),
     LISTED.replace('/image/', '/image/x/'),
     '/schemas/shared/image%2Fv1.0.0.json',
-  ])('returns 404 for %s, cacheable for 60 s, for GET and POST', async (path) => {
+    '/schemas/shared/image%2Ffile/v1.0.0.json',
+  ])('returns a no-store 404 for malformed path %s without an SDK lookup', async (path) => {
+    const lookup = vi.mocked(getSharedSchema);
+    lookup.mockClear();
     for (const method of ['GET', 'POST']) {
       // eslint-disable-next-line no-await-in-loop
       const response = await run(path, { method });
       expect(response.status).toBe(404);
-      expect(response.headers.get('Cache-Control')).toBe('public, max-age=60');
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
       expect(response.headers.has('Allow')).toBe(false);
       expectBaseHeaders(response);
     }
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [UNKNOWN, 'GET'],
+    [UNKNOWN, 'POST'],
+    [LISTED.replace('/v1.0.0', '/v999.0.0'), 'GET'],
+  ])('returns a 404 cacheable for 60 s on a lookup miss for %s (%s)', async (path, method) => {
+    const response = await run(path, { method });
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get('Cache-Control')).toBe('public, max-age=60');
+    expect(response.headers.has('Allow')).toBe(false);
+    expectBaseHeaders(response);
   });
 
   it('ignores query strings', async () => {
@@ -117,7 +135,8 @@ describe('handleJsonSchemaRequest', () => {
 
   it.each([
     ['200', LISTED, 'GET', 200],
-    ['404', UNKNOWN, 'GET', 404],
+    ['404 lookup miss', UNKNOWN, 'GET', 404],
+    ['404 malformed path', '/schemas', 'GET', 404],
     ['405', LISTED, 'POST', 405],
   ])('returns private, no-store for %s when Authorization is present', async (_name, path, method, status) => {
     for (const authorization of ['token x', 'Bearer y', '']) {
@@ -191,6 +210,7 @@ describe('schema failure logging', () => {
 
   it.each([
     ['/schemas', 'GET', 404],
+    [LISTED.replace('/v1.0.0', '/vv1.0.0'), 'GET', 404],
     [LISTED, 'POST', 405],
     [UNKNOWN, 'OPTIONS', 204],
     [LISTED, 'GET', 200],

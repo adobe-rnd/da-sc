@@ -30,7 +30,8 @@ looked up by name and version with the SDK's `getSharedSchema`. No external serv
 | --- | --- | --- |
 | `GET` on a known schema path | `200`, `application/schema+json` | `public, max-age=31536000, immutable` |
 | `OPTIONS` on any `/schemas` path | `204` (CORS preflight) | none |
-| Unknown path, other methods | `404` | `public, max-age=60` |
+| Malformed schema path, except `OPTIONS` | `404` | `no-store` |
+| Well-formed schema path with no matching name/version, except `OPTIONS` | `404` | `public, max-age=60` |
 | Other methods on a known schema path | `405` | `no-store` |
 
 - Every response allows any origin (CORS) and carries `X-Content-Type-Options: nosniff` and a

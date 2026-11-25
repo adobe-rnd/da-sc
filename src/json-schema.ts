@@ -13,7 +13,7 @@ import { getSharedSchema } from '@adobe/da-sc-sdk';
 
 const IMMUTABLE_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 const NOT_FOUND_CACHE_CONTROL = 'public, max-age=60';
-const SCHEMA_PATH = /^\/schemas\/shared\/([^/]+)\/v([^/]+)\.json$/;
+const SCHEMA_PATH = /^\/schemas\/shared\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/v((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))\.json$/;
 
 const BASE_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -49,7 +49,7 @@ function respond(request: Request): Response {
 
   const [, name, version] = SCHEMA_PATH.exec(new URL(request.url).pathname) ?? [];
   if (!name || !version) {
-    return textResponse(404, 'Not Found', { 'Cache-Control': NOT_FOUND_CACHE_CONTROL });
+    return textResponse(404, 'Not Found', { 'Cache-Control': 'no-store' });
   }
 
   const lookup = getSharedSchema({ name, version });
