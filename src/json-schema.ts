@@ -48,8 +48,15 @@ function respond(request: Request): Response {
   }
 
   const [, name, version] = SCHEMA_PATH.exec(new URL(request.url).pathname) ?? [];
-  const lookup = name && version ? getSharedSchema({ name, version }) : undefined;
-  if (!lookup || 'error' in lookup) {
+  if (!name || !version) {
+    return textResponse(404, 'Not Found', { 'Cache-Control': NOT_FOUND_CACHE_CONTROL });
+  }
+
+  const lookup = getSharedSchema({ name, version });
+  if ('error' in lookup) {
+    console.warn({
+      status: 404, event: 'schema_not_found', name, version,
+    });
     return textResponse(404, 'Not Found', { 'Cache-Control': NOT_FOUND_CACHE_CONTROL });
   }
 
@@ -74,7 +81,13 @@ function respond(request: Request): Response {
  * requests with an `Authorization` header are never cacheable (RFC §7).
  */
 export async function handleJsonSchemaRequest(request: Request): Promise<Response> {
-  const response = respond(request);
+  let response: Response;
+  try {
+    response = respond(request);
+  } catch {
+    console.error({ status: 500, event: 'schema_error', method: request.method });
+    response = textResponse(500, 'Internal Server Error', { 'Cache-Control': 'no-store' });
+  }
   if (request.headers.has('Authorization')) {
     response.headers.set('Cache-Control', 'private, no-store');
   }

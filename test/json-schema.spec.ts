@@ -9,8 +9,16 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { describe, expect, it } from 'vitest';
+import { getSharedSchema } from '@adobe/da-sc-sdk';
+import {
+  afterEach, describe, expect, it, vi,
+} from 'vitest';
 import { handleJsonSchemaRequest } from '../src/json-schema';
+
+vi.mock('@adobe/da-sc-sdk', async (importOriginal) => {
+  const sdk = await importOriginal<typeof import('@adobe/da-sc-sdk')>();
+  return { ...sdk, getSharedSchema: vi.fn(sdk.getSharedSchema) };
+});
 
 const SCHEMA_ORIGIN = 'https://headless.adobe.net';
 const PATHS = [
@@ -119,5 +127,81 @@ describe('handleJsonSchemaRequest', () => {
       expect(response.headers.get('Cache-Control')).toBe('private, no-store');
       expectBaseHeaders(response);
     }
+  });
+});
+
+describe('schema failure logging', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('warns once on a schema lookup miss without logging credentials or the query', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const response = await run(`${UNKNOWN}?secret=query-value`, {
+      headers: { Authorization: 'Bearer token-value' },
+    });
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(warnSpy.mock.calls).toEqual([[{
+      status: 404, event: 'schema_not_found', name: 'unknown-schema', version: '1.0.0',
+    }]]);
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [undefined, 'no-store'],
+    ['Bearer token-value', 'private, no-store'],
+  ])('logs a lookup exception and returns a sanitized 500 (Authorization: %s)', async (auth, cacheControl) => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(getSharedSchema).mockImplementationOnce(() => {
+      throw new Error('private SDK details');
+    });
+
+    const response = await run(`${LISTED}?secret=query-value`, {
+      headers: auth === undefined ? {} : { Authorization: auth },
+    });
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get('Cache-Control')).toBe(cacheControl);
+    expectBaseHeaders(response);
+    expect(await response.text()).toBe('Internal Server Error');
+    expect(errorSpy.mock.calls).toEqual([[{ status: 500, event: 'schema_error', method: 'GET' }]]);
+  });
+
+  it('logs a serialization exception and returns a sanitized 500', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const lookup = getSharedSchema({ name: 'image', version: '1.0.0' });
+    if ('error' in lookup) throw new Error('Expected the bundled image schema');
+    const schema = {
+      ...lookup.schema,
+      toJSON() {
+        throw new Error('private serialization details');
+      },
+    };
+    vi.mocked(getSharedSchema).mockReturnValueOnce({ ...lookup, schema });
+
+    const response = await run(LISTED);
+
+    expect(response.status).toBe(500);
+    expect(await response.text()).toBe('Internal Server Error');
+    expect(errorSpy.mock.calls).toEqual([[{ status: 500, event: 'schema_error', method: 'GET' }]]);
+  });
+
+  it.each([
+    ['/schemas', 'GET', 404],
+    [LISTED, 'POST', 405],
+    [UNKNOWN, 'OPTIONS', 204],
+    [LISTED, 'GET', 200],
+  ])('does not log %s %s (status %i)', async (path, method, status) => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const response = await run(path, { method });
+
+    expect(response.status).toBe(status);
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 });
