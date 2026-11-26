@@ -91,8 +91,11 @@ export function copyEdsCacheHeaders(
   ['Vary', 'X-Error', 'X-Robots-Tag'].forEach(copy);
   if (fields) fields.tags.forEach(copy);
 
-  const cacheableTokenStatus = upstream.status === 200 || upstream.status === 404;
-  if (token && (!allowAuthenticatedCaching || !cacheableTokenStatus)) {
+  const { status } = upstream;
+  // EDS provides its own non-cacheable policy for these error statuses.
+  const edsPolicyStatus = status === 200 || status === 404
+    || status === 400 || status === 401 || status === 429 || (status >= 500 && status < 600);
+  if (token && (!allowAuthenticatedCaching || !edsPolicyStatus)) {
     downstream.set('Cache-Control', 'private, no-store');
     return;
   }

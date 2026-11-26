@@ -508,9 +508,9 @@ describe('da-sc worker', () => {
       expect(fetchSpy.mock.lastCall?.[1]?.headers).toEqual({ Authorization: 'token secret' });
     });
 
-    it('keeps token failures private even when the rollout switch is enabled', async () => {
+    it('keeps the no-store fallback for token errors without EDS Cache-Control', async () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('forbidden', {
-        status: 401, headers: fastlyHeaders,
+        status: 401, headers: { 'Surrogate-Control': 'max-age=0' },
       }));
       const response = await runRequest(liveUrl, {
         headers: {
@@ -521,14 +521,17 @@ describe('da-sc worker', () => {
         },
       }, { ENABLE_EDS_AUTH_CACHE_AND_PUSH_INVALIDATION: true });
       expect(response.status).toBe(401);
-      expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
       expect(response.headers.has('Surrogate-Control')).toBe(false);
       expect(response.headers.has('ETag')).toBe(false);
     });
 
     describe.each([
       [400, 'Illegal XFH', 'invalid-forwarded-host'],
+      [401, 'Unauthorized', 'token-mismatch'],
       [429, 'Too Many Requests', 'rate-limited'],
+      [500, 'Internal Server Error', 'internal-error'],
+      [503, 'Service Unavailable', 'unavailable'],
     ] as const)('EDS %i', (status, body, xError) => {
       it.each([
         [false, false, false],
@@ -565,8 +568,9 @@ describe('da-sc worker', () => {
         expect(response.status).toBe(status);
         expect(await response.json()).toEqual({ error: body });
         expect(response.headers.get('X-Error')).toBe(xError);
-        expect(response.headers.get('Cache-Control')).toBe(token ? 'private, no-store' : 'private, no-cache');
-        expect(response.headers.get('Surrogate-Control')).toBe(token ? null : 'max-age=0');
+        const useEdsPolicy = enabled || !token;
+        expect(response.headers.get('Cache-Control')).toBe(useEdsPolicy ? 'private, no-cache' : 'private, no-store');
+        expect(response.headers.get('Surrogate-Control')).toBe(useEdsPolicy ? 'max-age=0' : null);
         expect(response.headers.has('ETag')).toBe(false);
       });
     });
