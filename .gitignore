@@ -29,6 +29,7 @@ wrangler-versioned.toml
 .deployment-env
 
 build/Release
+/dist/
 
 # Dependency directories
 node_modules/
