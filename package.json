@@ -14,7 +14,7 @@
     "deploy": "wrangler deploy",
     "deploy:ci": "node prepare-deploy.js && wrangler deploy -e ci -c wrangler-versioned.toml",
     "deploy:production": "node prepare-deploy.js && wrangler deploy -e production -c wrangler-versioned.toml",
-    "lint": "eslint .",
+    "lint": "eslint . --ignore-pattern dist/",
     "test": "vitest run",
     "prepare": "husky",
     "semantic-release": "semantic-release",
