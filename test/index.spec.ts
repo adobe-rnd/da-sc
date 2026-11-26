@@ -526,6 +526,51 @@ describe('da-sc worker', () => {
       expect(response.headers.has('ETag')).toBe(false);
     });
 
+    describe.each([
+      [400, 'Illegal XFH', 'invalid-forwarded-host'],
+      [429, 'Too Many Requests', 'rate-limited'],
+    ] as const)('EDS %i', (status, body, xError) => {
+      it.each([
+        [false, false, false],
+        [false, false, true],
+        [false, true, false],
+        [false, true, true],
+        [true, false, false],
+        [true, false, true],
+        [true, true, false],
+        [true, true, true],
+      ])('keeps the error non-cacheable (switch=%s, push=%s, token=%s)', async (enabled, push, token) => {
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(body, {
+          status,
+          headers: {
+            'Cache-Control': 'private, no-cache',
+            'Surrogate-Control': 'max-age=0',
+            'X-Error': xError,
+          },
+        }));
+        const forwardedHost = status === 400 ? 'a_b' : 'cdn.example.com';
+        const response = await runRequest(liveUrl, {
+          headers: {
+            'X-BYO-CDN-Type': 'fastly',
+            'X-Forwarded-Host': forwardedHost,
+            'If-None-Match': '*',
+            ...(token ? { Authorization: 'token secret' } : {}),
+            ...(push ? { 'X-Push-Invalidation': 'enabled' } : {}),
+          },
+        }, { ENABLE_EDS_AUTH_CACHE_AND_PUSH_INVALIDATION: enabled });
+
+        const upstreamHeaders = new Headers(fetchSpy.mock.lastCall?.[1]?.headers);
+        expect(upstreamHeaders.get('X-Forwarded-Host')).toBe(forwardedHost);
+        expect(upstreamHeaders.get('X-Push-Invalidation')).toBe(enabled && push ? 'enabled' : null);
+        expect(response.status).toBe(status);
+        expect(await response.json()).toEqual({ error: body });
+        expect(response.headers.get('X-Error')).toBe(xError);
+        expect(response.headers.get('Cache-Control')).toBe(token ? 'private, no-store' : 'private, no-cache');
+        expect(response.headers.get('Surrogate-Control')).toBe(token ? null : 'max-age=0');
+        expect(response.headers.has('ETag')).toBe(false);
+      });
+    });
+
     it('suppresses CloudFront s-maxage and other vendor TTLs on protected responses', async () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(MOCK_EDS_HTML, {
         headers: { ...fastlyHeaders, 'Cache-Control': 'max-age=7200, s-maxage=300' },
