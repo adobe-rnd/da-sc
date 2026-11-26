@@ -126,7 +126,7 @@ export default {
           responseHeaders.set('Access-Control-Expose-Headers', 'X-Error, Cache-Control');
           const location = redirect && edsResp.headers.get('Location');
           if (location) {
-            responseHeaders.set('Location', mapEdsLocation(location, edsContentUrl, requestUrl, contentRoute));
+            responseHeaders.set('Location', mapEdsLocation(location, edsContentUrl, requestUrl, contentRoute, status));
           }
           await edsResp.body?.cancel();
           return new Response(null, { status, headers: responseHeaders });

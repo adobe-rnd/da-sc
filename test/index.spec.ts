@@ -539,6 +539,8 @@ describe('da-sc worker', () => {
 
     it.each([
       [301, '', '/final?from=eds#section', 'https://worker.example/live/org/site/final?from=eds#section'],
+      [301, '.json', '/final#section', 'https://worker.example/live/org/site/final.json?campaign=spring#section'],
+      [301, '.json', 'https://external.example/final', 'https://external.example/final'],
       [302, '.json', 'next?from=eds', 'https://worker.example/live/org/site/next.json?from=eds'],
       [307, '.json', 'https://main--site--org.aem.live/', 'https://worker.example/live/org/site/.json'],
       [308, '.json', 'https://external.example/final?from=eds', 'https://external.example/final?from=eds'],
@@ -547,10 +549,11 @@ describe('da-sc worker', () => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('redirect', {
         status, headers: { ...fastlyHeaders, Location: location },
       }));
-      const response = await runRequest(`${liveUrl}${suffix}?ignored=1`, {
+      const response = await runRequest(`${liveUrl}${suffix}?campaign=spring`, {
         headers: { 'X-BYO-CDN-Type': 'fastly' },
       });
       expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy.mock.lastCall?.[0]).toBe('https://main--site--org.aem.live/page');
       expect(response.status).toBe(status);
       expect(response.headers.get('Location')).toBe(expected);
       expect(response.headers.get('Cache-Control')).toBe(fastlyHeaders['Cache-Control']);

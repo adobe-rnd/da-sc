@@ -109,6 +109,7 @@ export function mapEdsLocation(
   edsUrl: string,
   requestUrl: URL,
   route: ContentRoute,
+  status: number,
 ): string {
   let destination: URL;
   try {
@@ -120,5 +121,6 @@ export function mapEdsLocation(
   const {
     tier, org, site, suffix,
   } = route;
-  return `${requestUrl.origin}/${tier}/${org}/${site}${destination.pathname}${suffix}${destination.search}${destination.hash}`;
+  const search = destination.search || (status === 301 ? requestUrl.search : '');
+  return `${requestUrl.origin}/${tier}/${org}/${site}${destination.pathname}${suffix}${search}${destination.hash}`;
 }
